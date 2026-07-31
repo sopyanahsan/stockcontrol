@@ -1,0 +1,347 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMINISTRATOR
+  STOCK_CONTROL
+  SUPERVISOR
+}
+
+enum LocationType {
+  RECEIVING
+  STORAGE
+  PICKING
+  STAGING
+  DAMAGED
+}
+
+enum TxnType {
+  RECEIVING
+  PUTAWAY
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  CYCLE_COUNT
+  OPNAME
+}
+
+enum DocStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+enum ReasonType {
+  RECEIVING
+  PUTAWAY
+  MOVEMENT
+  ADJUSTMENT
+  CYCLE_COUNT
+  OPNAME
+}
+
+model User {
+  id            String        @id @default(uuid())
+  email         String        @unique
+  passwordHash  String
+  name          String
+  role          Role
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  auditLogs     AuditLog[]
+  ledgerEntries StockLedger[]
+}
+
+model Category {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+  items       Item[]
+}
+
+model Uom {
+  id    String @id @default(uuid())
+  code  String @unique
+  name  String
+  items Item[]
+}
+
+model Item {
+  id            String        @id @default(uuid())
+  sku           String        @unique
+  name          String
+  description   String?
+  barcode       String?
+  categoryId    String
+  category      Category      @relation(fields: [categoryId], references: [id])
+  uomId         String
+  uom           Uom           @relation(fields: [uomId], references: [id])
+  minStock      Float         @default(0)
+  maxStock      Float         @default(0)
+  reorderPoint  Float         @default(0)
+  unitCost      Float         @default(0)
+  imageUrl      String?
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  ledgerEntries StockLedger[]
+  fifoLayers    FifoLayer[]
+
+  @@index([sku])
+  @@index([name])
+}
+
+model Warehouse {
+  id       String  @id @default(uuid())
+  code     String  @unique
+  name     String
+  address  String?
+  isActive Boolean @default(true)
+  zones    Zone[]
+}
+
+model Zone {
+  id          String    @id @default(uuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  code        String
+  name        String
+  locations   Location[]
+
+  @@unique([warehouseId, code])
+}
+
+model Location {
+  id            String        @id @default(uuid())
+  zoneId        String
+  zone          Zone          @relation(fields: [zoneId], references: [id])
+  code          String        @unique
+  type          LocationType  @default(STORAGE)
+  isActive      Boolean       @default(true)
+  ledgerEntries StockLedger[]
+  fifoLayers    FifoLayer[]
+}
+
+model ReasonCode {
+  id            String        @id @default(uuid())
+  code          String        @unique
+  description   String
+  type          ReasonType
+  isActive      Boolean       @default(true)
+  ledgerEntries StockLedger[]
+}
+
+// ============ STOCK LEDGER - single source of truth ============
+model StockLedger {
+  id           String      @id @default(uuid())
+  itemId       String
+  item         Item        @relation(fields: [itemId], references: [id])
+  locationId   String
+  location     Location    @relation(fields: [locationId], references: [id])
+  txnType      TxnType
+  qty          Float // signed: positive = in, negative = out
+  unitCost     Float       @default(0)
+  refType      String? // RECEIVING | PUTAWAY | TRANSFER | ADJUSTMENT | CYCLE_COUNT | OPNAME | SEED
+  refId        String?
+  refNumber    String?
+  reasonCodeId String?
+  reasonCode   ReasonCode? @relation(fields: [reasonCodeId], references: [id])
+  remarks      String?
+  userId       String
+  user         User        @relation(fields: [userId], references: [id])
+  createdAt    DateTime    @default(now())
+
+  @@index([itemId, locationId])
+  @@index([createdAt])
+  @@index([txnType])
+}
+
+// ============ FIFO ENGINE ============
+model FifoLayer {
+  id           String   @id @default(uuid())
+  itemId       String
+  item         Item     @relation(fields: [itemId], references: [id])
+  locationId   String
+  location     Location @relation(fields: [locationId], references: [id])
+  refNumber    String?
+  receivedAt   DateTime @default(now())
+  qtyReceived  Float
+  qtyRemaining Float
+  unitCost     Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([itemId, locationId, receivedAt])
+}
+
+// ============ AUDIT TRAIL ============
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  userName    String
+  action      String // CREATE | UPDATE | DELETE | LOGIN | LOGOUT | APPROVE | REJECT | POST
+  module      String // AUTH | MASTER_ITEM | LOCATION | RECEIVING | PUTAWAY | MOVEMENT | ADJUSTMENT | CYCLE_COUNT | OPNAME
+  entityType  String
+  entityId    String?
+  description String
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now())
+
+  @@index([module])
+  @@index([createdAt])
+  @@index([userId])
+}
+
+// ============ PRIORITY 2+ TRANSACTION DOCUMENTS ============
+model Receiving {
+  id          String          @id @default(uuid())
+  grnNumber   String          @unique
+  supplier    String?
+  refDocument String?
+  status      DocStatus       @default(DRAFT)
+  remarks     String?
+  createdById String
+  postedAt    DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  lines       ReceivingLine[]
+}
+
+model ReceivingLine {
+  id          String    @id @default(uuid())
+  receivingId String
+  receiving   Receiving @relation(fields: [receivingId], references: [id], onDelete: Cascade)
+  itemId      String
+  locationId  String
+  expectedQty Float     @default(0)
+  receivedQty Float     @default(0)
+  unitCost    Float     @default(0)
+  batchNo     String?
+  remarks     String?
+}
+
+model PutawayTask {
+  id             String    @id @default(uuid())
+  taskNumber     String    @unique
+  itemId         String
+  qty            Float
+  fromLocationId String
+  toLocationId   String
+  status         DocStatus @default(DRAFT)
+  remarks        String?
+  createdById    String
+  completedById  String?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+}
+
+model StockTransfer {
+  id             String              @id @default(uuid())
+  transferNumber String              @unique
+  status         DocStatus           @default(DRAFT)
+  remarks        String?
+  reasonCodeId   String?
+  createdById    String
+  approvedById   String?
+  approvedAt     DateTime?
+  postedAt       DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  lines          StockTransferLine[]
+}
+
+model StockTransferLine {
+  id             String        @id @default(uuid())
+  transferId     String
+  transfer       StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  itemId         String
+  fromLocationId String
+  toLocationId   String
+  qty            Float
+}
+
+model StockAdjustment {
+  id               String                @id @default(uuid())
+  adjustmentNumber String                @unique
+  status           DocStatus             @default(DRAFT)
+  reasonCodeId     String?
+  remarks          String?
+  createdById      String
+  approvedById     String?
+  approvedAt       DateTime?
+  postedAt         DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  lines            StockAdjustmentLine[]
+}
+
+model StockAdjustmentLine {
+  id           String          @id @default(uuid())
+  adjustmentId String
+  adjustment   StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  itemId       String
+  locationId   String
+  systemQty    Float           @default(0)
+  countedQty   Float           @default(0)
+  diffQty      Float           @default(0)
+}
+
+model CycleCount {
+  id          String           @id @default(uuid())
+  countNumber String           @unique
+  status      DocStatus        @default(DRAFT)
+  locationId  String?
+  remarks     String?
+  createdById String
+  postedAt    DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  lines       CycleCountLine[]
+}
+
+model CycleCountLine {
+  id           String     @id @default(uuid())
+  cycleCountId String
+  cycleCount   CycleCount @relation(fields: [cycleCountId], references: [id], onDelete: Cascade)
+  itemId       String
+  locationId   String
+  systemQty    Float      @default(0)
+  countedQty   Float      @default(0)
+  diffQty      Float      @default(0)
+}
+
+model StockOpname {
+  id           String            @id @default(uuid())
+  opnameNumber String            @unique
+  status       DocStatus         @default(DRAFT)
+  remarks      String?
+  createdById  String
+  approvedById String?
+  postedAt     DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  lines        StockOpnameLine[]
+}
+
+model StockOpnameLine {
+  id            String      @id @default(uuid())
+  stockOpnameId String
+  stockOpname   StockOpname @relation(fields: [stockOpnameId], references: [id], onDelete: Cascade)
+  itemId        String
+  locationId    String
+  systemQty     Float       @default(0)
+  countedQty    Float       @default(0)
+  diffQty       Float       @default(0)
+}
