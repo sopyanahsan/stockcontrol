@@ -291,10 +291,7 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "Document Number Generator service (GRN-{WHCODE}-{YYYYMM}-{NNNNNN})"
-    - "Barcode lookup API (GET /api/barcode?code=...)"
-    - "Receiving CRUD + status workflow (DRAFT -> RECEIVING -> WAITING_PUTAWAY -> COMPLETED / CANCELLED)"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
