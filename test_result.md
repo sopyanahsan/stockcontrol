@@ -247,13 +247,8 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus:
-    - "Login page + auth guard + role-aware AppShell (sidebar, header, command palette)"
-    - "Dashboard, Master Item, Locations, Stock, Audit Trail pages"
+  current_focus: []
   stuck_tasks: []
-    - agent: "main"
-      message: "Frontend hydration blocker resolved on the current build. Applied defensive suppressHydrationWarning on <html>/<body> in app/layout.js to guard against browser-extension attribute injection. Manual screenshot verification shows: (1) login page renders and inputs accept text, (2) login submission succeeds and redirects to /, (3) dashboard renders KPI cards + charts + low stock + recent activity. Console had 0 hydration errors. Please run full frontend testing pass for Priority 1 flows: login for each of 3 roles, dashboard rendering, master items CRUD, locations CRUD, stock on hand grid, audit trail filters, logout. Credentials in /app/memory/test_credentials.md. Use base URL from NEXT_PUBLIC_BASE_URL. RBAC expectation: STOCK_CONTROL role should not see create/delete UI for items/locations, or should get 403 if attempted."
-
   test_all: false
   test_priority: "high_first"
 
