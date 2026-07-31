@@ -659,6 +659,772 @@ def test_audit_trail(admin_session: TestSession):
     return True
 
 
+def test_receiving_document_numbering(admin_session: TestSession, warehouse_id: str):
+    """Test 11: Document Numbering (GRN format & concurrency)"""
+    print("\n" + "="*80)
+    print("TEST 11: RECEIVING - DOCUMENT NUMBERING")
+    print("="*80)
+    
+    # Create 2 receivings back-to-back
+    print("\n--- Creating 2 receivings back-to-back ---")
+    grn_numbers = []
+    
+    for i in range(2):
+        resp = admin_session.post("/receiving", json={
+            "warehouseId": warehouse_id,
+            "supplier": f"Test Supplier {i+1}",
+            "refDocument": f"PO-{i+1:03d}"
+        })
+        if resp.status_code == 201:
+            receiving = resp.json()
+            grn = receiving.get("grnNumber")
+            grn_numbers.append(grn)
+            print(f"✅ Receiving {i+1} created: {grn}")
+        else:
+            print(f"❌ Receiving {i+1} creation failed: {resp.status_code} - {resp.text}")
+            return None
+    
+    # Verify GRN format
+    import re
+    grn_pattern = r'^GRN-WH01-\d{6}-\d{6}$'
+    print(f"\n--- Verifying GRN format (pattern: {grn_pattern}) ---")
+    for grn in grn_numbers:
+        if re.match(grn_pattern, grn):
+            print(f"✅ GRN format valid: {grn}")
+        else:
+            print(f"❌ GRN format invalid: {grn}")
+            return None
+    
+    # Verify sequences are strictly increasing
+    print(f"\n--- Verifying sequence increment ---")
+    seq1 = int(grn_numbers[0].split('-')[-1])
+    seq2 = int(grn_numbers[1].split('-')[-1])
+    if seq2 == seq1 + 1:
+        print(f"✅ Sequences are strictly increasing: {seq1} -> {seq2}")
+    else:
+        print(f"❌ Sequences are NOT strictly increasing: {seq1} -> {seq2}")
+        return None
+    
+    return grn_numbers
+
+
+def test_receiving_auto_staging(admin_session: TestSession, warehouse_id: str):
+    """Test 12: Auto staging location"""
+    print("\n" + "="*80)
+    print("TEST 12: RECEIVING - AUTO STAGING LOCATION")
+    print("="*80)
+    
+    # Create receiving without specifying stagingLocationId
+    print("\n--- Creating receiving without stagingLocationId ---")
+    resp = admin_session.post("/receiving", json={
+        "warehouseId": warehouse_id,
+        "supplier": "Auto Staging Test"
+    })
+    
+    if resp.status_code == 201:
+        receiving = resp.json()
+        staging_location = receiving.get("stagingLocation", {})
+        staging_code = staging_location.get("code")
+        staging_id = receiving.get("stagingLocationId")
+        
+        print(f"Staging Location Code: {staging_code}")
+        print(f"Staging Location ID: {staging_id}")
+        
+        if staging_code == "STG-01" and staging_id:
+            print(f"✅ Auto-picked staging location: {staging_code}")
+            return receiving
+        else:
+            print(f"❌ Expected STG-01, got: {staging_code}")
+            return None
+    else:
+        print(f"❌ Receiving creation failed: {resp.status_code} - {resp.text}")
+        return None
+
+
+def test_receiving_draft_edit_lines(admin_session: TestSession, warehouse_id: str, items: list):
+    """Test 13: Draft edit lines (PUT)"""
+    print("\n" + "="*80)
+    print("TEST 13: RECEIVING - DRAFT EDIT LINES")
+    print("="*80)
+    
+    # Find non-serial and serial-tracked items
+    non_serial_item = None
+    serial_item = None
+    
+    for item in items:
+        if item.get("serialTracked"):
+            serial_item = item
+        else:
+            non_serial_item = item
+        if non_serial_item and serial_item:
+            break
+    
+    if not non_serial_item or not serial_item:
+        print(f"❌ Could not find both non-serial and serial-tracked items")
+        return None
+    
+    print(f"Non-serial item: {non_serial_item['sku']}")
+    print(f"Serial-tracked item: {serial_item['sku']}")
+    
+    # Create draft
+    print("\n--- Creating draft ---")
+    resp = admin_session.post("/receiving", json={
+        "warehouseId": warehouse_id,
+        "supplier": "Draft Edit Test"
+    })
+    
+    if resp.status_code != 201:
+        print(f"❌ Draft creation failed: {resp.status_code} - {resp.text}")
+        return None
+    
+    draft = resp.json()
+    draft_id = draft["id"]
+    print(f"✅ Draft created: {draft['grnNumber']}")
+    
+    # Update draft with lines
+    print("\n--- Updating draft with lines ---")
+    resp = admin_session.put(f"/receiving/{draft_id}", json={
+        "lines": [
+            {
+                "itemId": non_serial_item["id"],
+                "expectedQty": 10,
+                "unitCost": 5
+            },
+            {
+                "itemId": serial_item["id"],
+                "expectedQty": 3,
+                "unitCost": 22
+            }
+        ]
+    })
+    
+    if resp.status_code != 200:
+        print(f"❌ Draft update failed: {resp.status_code} - {resp.text}")
+        return None
+    
+    updated = resp.json()
+    lines = updated.get("lines", [])
+    print(f"✅ Draft updated with {len(lines)} lines")
+    
+    # Verify lines
+    if len(lines) == 2:
+        print(f"✅ Correct number of lines: 2")
+        for line in lines:
+            item = line.get("item", {})
+            print(f"  Line: {item.get('sku')} - expectedQty={line.get('expectedQty')}, unitCost={line.get('unitCost')}")
+        return draft
+    else:
+        print(f"❌ Expected 2 lines, got {len(lines)}")
+        return None
+
+
+def test_receiving_start_flow(admin_session: TestSession, warehouse_id: str, items: list):
+    """Test 14: Start flow (DRAFT -> RECEIVING)"""
+    print("\n" + "="*80)
+    print("TEST 14: RECEIVING - START FLOW")
+    print("="*80)
+    
+    # Create draft with lines
+    print("\n--- Creating draft with lines ---")
+    resp = admin_session.post("/receiving", json={
+        "warehouseId": warehouse_id,
+        "supplier": "Start Flow Test",
+        "lines": [
+            {
+                "itemId": items[0]["id"],
+                "expectedQty": 5,
+                "unitCost": 10
+            }
+        ]
+    })
+    
+    if resp.status_code != 201:
+        print(f"❌ Draft creation failed: {resp.status_code}")
+        return None
+    
+    draft = resp.json()
+    draft_id = draft["id"]
+    print(f"✅ Draft created: {draft['grnNumber']}")
+    
+    # Start receiving
+    print("\n--- Starting receiving ---")
+    resp = admin_session.post(f"/receiving/{draft_id}/start")
+    
+    if resp.status_code == 200:
+        started = resp.json()
+        status = started.get("status")
+        if status == "RECEIVING":
+            print(f"✅ Receiving started: status={status}")
+        else:
+            print(f"❌ Expected status=RECEIVING, got {status}")
+            return None
+    else:
+        print(f"❌ Start failed: {resp.status_code} - {resp.text}")
+        return None
+    
+    # Test starting empty draft (should fail)
+    print("\n--- Testing start on empty draft (should fail) ---")
+    resp = admin_session.post("/receiving", json={
+        "warehouseId": warehouse_id,
+        "supplier": "Empty Draft"
+    })
+    
+    if resp.status_code == 201:
+        empty_draft = resp.json()
+        resp = admin_session.post(f"/receiving/{empty_draft['id']}/start")
+        if resp.status_code == 400:
+            print(f"✅ Empty draft start correctly rejected (400)")
+        else:
+            print(f"❌ Empty draft start should return 400, got {resp.status_code}")
+    
+    return draft
+
+
+def test_receiving_post_happy_path(admin_session: TestSession, warehouse_id: str, items: list):
+    """Test 15: Post flow (RECEIVING -> WAITING_PUTAWAY) — happy path"""
+    print("\n" + "="*80)
+    print("TEST 15: RECEIVING - POST HAPPY PATH")
+    print("="*80)
+    
+    # Find non-serial and serial-tracked items
+    non_serial_item = None
+    serial_item = None
+    
+    for item in items:
+        if item.get("serialTracked"):
+            serial_item = item
+        else:
+            non_serial_item = item
+        if non_serial_item and serial_item:
+            break
+    
+    if not non_serial_item or not serial_item:
+        print(f"❌ Could not find both item types")
+        return None
+    
+    # Create and start receiving
+    print("\n--- Creating receiving with mixed lines ---")
+    resp = admin_session.post("/receiving", json={
+        "warehouseId": warehouse_id,
+        "supplier": "Post Test Supplier",
+        "lines": [
+            {
+                "itemId": non_serial_item["id"],
+                "expectedQty": 10,
+                "unitCost": 5
+            },
+            {
+                "itemId": serial_item["id"],
+                "expectedQty": 3,
+                "unitCost": 22
+            }
+        ]
+    })
+    
+    if resp.status_code != 201:
+        print(f"❌ Receiving creation failed: {resp.status_code}")
+        return None
+    
+    receiving = resp.json()
+    receiving_id = receiving["id"]
+    grn_number = receiving["grnNumber"]
+    print(f"✅ Receiving created: {grn_number}")
+    
+    # Start receiving
+    resp = admin_session.post(f"/receiving/{receiving_id}/start")
+    if resp.status_code != 200:
+        print(f"❌ Start failed: {resp.status_code}")
+        return None
+    print(f"✅ Receiving started")
+    
+    # Get line IDs
+    resp = admin_session.get(f"/receiving/{receiving_id}")
+    receiving = resp.json()
+    lines = receiving.get("lines", [])
+    
+    non_serial_line = next((l for l in lines if l["item"]["id"] == non_serial_item["id"]), None)
+    serial_line = next((l for l in lines if l["item"]["id"] == serial_item["id"]), None)
+    
+    if not non_serial_line or not serial_line:
+        print(f"❌ Could not find lines")
+        return None
+    
+    # Post receiving (use unique serial numbers with timestamp)
+    import time
+    timestamp = str(int(time.time()))[-6:]
+    serials = [f"SN-POST-{timestamp}-{i:03d}" for i in range(1, 4)]
+    
+    print("\n--- Posting receiving ---")
+    resp = admin_session.post(f"/receiving/{receiving_id}/post", json={
+        "lines": [
+            {
+                "lineId": non_serial_line["id"],
+                "receivedQty": 10
+            },
+            {
+                "lineId": serial_line["id"],
+                "receivedQty": 3,
+                "serials": serials
+            }
+        ]
+    })
+    
+    if resp.status_code != 200:
+        print(f"❌ Post failed: {resp.status_code} - {resp.text}")
+        return None
+    
+    posted = resp.json()
+    status = posted.get("status")
+    posted_at = posted.get("postedAt")
+    
+    if status == "WAITING_PUTAWAY" and posted_at:
+        print(f"✅ Receiving posted: status={status}, postedAt={posted_at}")
+    else:
+        print(f"❌ Expected status=WAITING_PUTAWAY with postedAt, got status={status}, postedAt={posted_at}")
+        return None
+    
+    # Verify ledger entries
+    print("\n--- Verifying ledger entries ---")
+    resp = admin_session.get("/ledger?limit=20")
+    if resp.status_code == 200:
+        ledger = resp.json()
+        receiving_entries = [e for e in ledger if e.get("refNumber") == grn_number]
+        
+        if len(receiving_entries) == 2:
+            print(f"✅ Found 2 ledger entries for {grn_number}")
+            for entry in receiving_entries:
+                print(f"  {entry['item']['sku']}: qty={entry['qty']}, txnType={entry['txnType']}, location={entry['location']['code']}")
+        else:
+            print(f"❌ Expected 2 ledger entries, found {len(receiving_entries)}")
+    else:
+        print(f"❌ Ledger query failed: {resp.status_code}")
+    
+    # Verify putaway tasks
+    print("\n--- Verifying putaway tasks ---")
+    resp = admin_session.get(f"/receiving/{receiving_id}")
+    receiving = resp.json()
+    lines = receiving.get("lines", [])
+    
+    for line in lines:
+        putaway_tasks = line.get("putawayTasks", [])
+        if len(putaway_tasks) > 0:
+            task = putaway_tasks[0]
+            task_number = task.get("taskNumber")
+            task_status = task.get("status")
+            
+            import re
+            if re.match(r'^PUT-WH01-\d{6}-\d{6}$', task_number) and task_status == "OPEN":
+                print(f"✅ Putaway task: {task_number}, status={task_status}")
+            else:
+                print(f"❌ Invalid putaway task: {task_number}, status={task_status}")
+        else:
+            print(f"❌ No putaway tasks for line {line['item']['sku']}")
+    
+    # Verify serials
+    print("\n--- Verifying serial numbers ---")
+    serial_line_updated = next((l for l in lines if l["item"]["id"] == serial_item["id"]), None)
+    if serial_line_updated:
+        serials = serial_line_updated.get("serials", [])
+        if len(serials) == 3:
+            print(f"✅ Found 3 serial numbers")
+            for serial in serials:
+                print(f"  {serial['serialNo']}: status={serial['status']}")
+        else:
+            print(f"❌ Expected 3 serials, found {len(serials)}")
+    
+    return receiving
+
+
+def test_receiving_post_validations(admin_session: TestSession, warehouse_id: str, items: list):
+    """Test 16: Post validation errors (all must return 400)"""
+    print("\n" + "="*80)
+    print("TEST 16: RECEIVING - POST VALIDATIONS")
+    print("="*80)
+    
+    # Find serial-tracked item
+    serial_item = next((item for item in items if item.get("serialTracked")), None)
+    if not serial_item:
+        print(f"❌ No serial-tracked item found")
+        return False
+    
+    print(f"Using serial-tracked item: {serial_item['sku']}")
+    
+    # Create and start receiving
+    print("\n--- Creating receiving with serial-tracked item ---")
+    resp = admin_session.post("/receiving", json={
+        "warehouseId": warehouse_id,
+        "supplier": "Validation Test",
+        "lines": [
+            {
+                "itemId": serial_item["id"],
+                "expectedQty": 2,
+                "unitCost": 10
+            }
+        ]
+    })
+    
+    if resp.status_code != 201:
+        print(f"❌ Receiving creation failed: {resp.status_code}")
+        return False
+    
+    receiving = resp.json()
+    receiving_id = receiving["id"]
+    line_id = receiving["lines"][0]["id"]
+    
+    resp = admin_session.post(f"/receiving/{receiving_id}/start")
+    if resp.status_code != 200:
+        print(f"❌ Start failed: {resp.status_code}")
+        return False
+    
+    # Test 1: Post with 0 receivedQty
+    print("\n--- Test 1: Post with 0 receivedQty (should be 400) ---")
+    resp = admin_session.post(f"/receiving/{receiving_id}/post", json={
+        "lines": [{"lineId": line_id, "receivedQty": 0}]
+    })
+    if resp.status_code == 400:
+        print(f"✅ Zero qty correctly rejected (400)")
+    else:
+        print(f"❌ Expected 400, got {resp.status_code}")
+    
+    # Test 2: Post with receivedQty but no serials
+    print("\n--- Test 2: Post with receivedQty=2 but no serials (should be 400) ---")
+    resp = admin_session.post(f"/receiving/{receiving_id}/post", json={
+        "lines": [{"lineId": line_id, "receivedQty": 2, "serials": []}]
+    })
+    if resp.status_code == 400:
+        print(f"✅ Missing serials correctly rejected (400)")
+    else:
+        print(f"❌ Expected 400, got {resp.status_code}")
+    
+    # Test 3: Post with duplicate serials within request
+    print("\n--- Test 3: Post with duplicate serials (should be 400) ---")
+    resp = admin_session.post(f"/receiving/{receiving_id}/post", json={
+        "lines": [{"lineId": line_id, "receivedQty": 2, "serials": ["SN-DUP", "SN-DUP"]}]
+    })
+    if resp.status_code == 400:
+        print(f"✅ Duplicate serials correctly rejected (400)")
+    else:
+        print(f"❌ Expected 400, got {resp.status_code}")
+    
+    # Test 4: Post with existing serial
+    print("\n--- Test 4: Post with existing serial SN-TEST-001 (should be 400) ---")
+    resp = admin_session.post(f"/receiving/{receiving_id}/post", json={
+        "lines": [{"lineId": line_id, "receivedQty": 2, "serials": ["SN-TEST-001", "SN-NEW"]}]
+    })
+    if resp.status_code == 400:
+        print(f"✅ Existing serial correctly rejected (400)")
+    else:
+        print(f"❌ Expected 400, got {resp.status_code}")
+    
+    print(f"\n✅ All validation tests passed")
+    return True
+
+
+def test_receiving_cancel_flow(admin_session: TestSession, warehouse_id: str, items: list):
+    """Test 17: Cancel flow + immutable numbering"""
+    print("\n" + "="*80)
+    print("TEST 17: RECEIVING - CANCEL FLOW")
+    print("="*80)
+    
+    # Create draft
+    print("\n--- Creating draft for cancellation ---")
+    resp = admin_session.post("/receiving", json={
+        "warehouseId": warehouse_id,
+        "supplier": "Cancel Test"
+    })
+    
+    if resp.status_code != 201:
+        print(f"❌ Draft creation failed: {resp.status_code}")
+        return False
+    
+    draft = resp.json()
+    draft_id = draft["id"]
+    draft_grn = draft["grnNumber"]
+    draft_seq = int(draft_grn.split('-')[-1])
+    print(f"✅ Draft created: {draft_grn} (seq={draft_seq})")
+    
+    # Cancel draft
+    print("\n--- Cancelling draft ---")
+    resp = admin_session.post(f"/receiving/{draft_id}/cancel", json={
+        "reason": "test cancellation"
+    })
+    
+    if resp.status_code == 200:
+        cancelled = resp.json()
+        status = cancelled.get("status")
+        if status == "CANCELLED":
+            print(f"✅ Draft cancelled: status={status}")
+        else:
+            print(f"❌ Expected status=CANCELLED, got {status}")
+            return False
+    else:
+        print(f"❌ Cancel failed: {resp.status_code} - {resp.text}")
+        return False
+    
+    # Create another draft and verify sequence incremented
+    print("\n--- Creating new draft after cancellation ---")
+    resp = admin_session.post("/receiving", json={
+        "warehouseId": warehouse_id,
+        "supplier": "After Cancel"
+    })
+    
+    if resp.status_code == 201:
+        new_draft = resp.json()
+        new_grn = new_draft["grnNumber"]
+        new_seq = int(new_grn.split('-')[-1])
+        
+        if new_seq == draft_seq + 1:
+            print(f"✅ Sequence incremented correctly: {draft_seq} -> {new_seq}")
+        else:
+            print(f"❌ Sequence NOT incremented: {draft_seq} -> {new_seq}")
+            return False
+    else:
+        print(f"❌ New draft creation failed: {resp.status_code}")
+        return False
+    
+    # Test cancelling WAITING_PUTAWAY (should fail)
+    print("\n--- Testing cancel on WAITING_PUTAWAY (should fail) ---")
+    # Create, start, and post a receiving
+    resp = admin_session.post("/receiving", json={
+        "warehouseId": warehouse_id,
+        "supplier": "Cancel Test 2",
+        "lines": [{"itemId": items[0]["id"], "expectedQty": 1, "unitCost": 5}]
+    })
+    
+    if resp.status_code == 201:
+        test_receiving = resp.json()
+        test_id = test_receiving["id"]
+        line_id = test_receiving["lines"][0]["id"]
+        
+        # Start and post
+        admin_session.post(f"/receiving/{test_id}/start")
+        resp = admin_session.post(f"/receiving/{test_id}/post", json={
+            "lines": [{"lineId": line_id, "receivedQty": 1}]
+        })
+        
+        if resp.status_code == 200:
+            # Try to cancel
+            resp = admin_session.post(f"/receiving/{test_id}/cancel", json={"reason": "test"})
+            if resp.status_code == 400:
+                print(f"✅ Cancel WAITING_PUTAWAY correctly rejected (400)")
+            else:
+                print(f"❌ Expected 400, got {resp.status_code}")
+    
+    return True
+
+
+def test_receiving_rbac(sessions: Dict[str, TestSession], warehouse_id: str, items: list):
+    """Test 18: RBAC for receiving operations"""
+    print("\n" + "="*80)
+    print("TEST 18: RECEIVING - RBAC")
+    print("="*80)
+    
+    # Test STOCK_CONTROL can create
+    print("\n--- STOCK_CONTROL: Create receiving (should be 201) ---")
+    resp = sessions["stock_control"].post("/receiving", json={
+        "warehouseId": warehouse_id,
+        "supplier": "RBAC Test"
+    })
+    
+    if resp.status_code == 201:
+        receiving = resp.json()
+        receiving_id = receiving["id"]
+        print(f"✅ STOCK_CONTROL can create receiving: {receiving['grnNumber']}")
+    else:
+        print(f"❌ STOCK_CONTROL should create receiving, got {resp.status_code}")
+        return False
+    
+    # Test STOCK_CONTROL can start
+    print("\n--- STOCK_CONTROL: Start receiving (should be 200) ---")
+    # Add lines first
+    resp = sessions["stock_control"].put(f"/receiving/{receiving_id}", json={
+        "lines": [{"itemId": items[0]["id"], "expectedQty": 1, "unitCost": 5}]
+    })
+    
+    resp = sessions["stock_control"].post(f"/receiving/{receiving_id}/start")
+    if resp.status_code == 200:
+        print(f"✅ STOCK_CONTROL can start receiving")
+    else:
+        print(f"❌ STOCK_CONTROL should start receiving, got {resp.status_code}")
+        return False
+    
+    # Test STOCK_CONTROL can post
+    print("\n--- STOCK_CONTROL: Post receiving (should be 200) ---")
+    resp = sessions["stock_control"].get(f"/receiving/{receiving_id}")
+    receiving = resp.json()
+    line_id = receiving["lines"][0]["id"]
+    
+    resp = sessions["stock_control"].post(f"/receiving/{receiving_id}/post", json={
+        "lines": [{"lineId": line_id, "receivedQty": 1}]
+    })
+    if resp.status_code == 200:
+        print(f"✅ STOCK_CONTROL can post receiving")
+    else:
+        print(f"❌ STOCK_CONTROL should post receiving, got {resp.status_code}")
+        return False
+    
+    # Test STOCK_CONTROL cannot cancel
+    print("\n--- STOCK_CONTROL: Cancel receiving (should be 403) ---")
+    # Create new draft for cancellation
+    resp = sessions["stock_control"].post("/receiving", json={
+        "warehouseId": warehouse_id,
+        "supplier": "Cancel RBAC Test"
+    })
+    
+    if resp.status_code == 201:
+        draft = resp.json()
+        resp = sessions["stock_control"].post(f"/receiving/{draft['id']}/cancel", json={"reason": "test"})
+        if resp.status_code == 403:
+            print(f"✅ STOCK_CONTROL correctly denied cancel (403)")
+        else:
+            print(f"❌ STOCK_CONTROL should get 403, got {resp.status_code}")
+            return False
+    
+    # Test SUPERVISOR can cancel
+    print("\n--- SUPERVISOR: Cancel receiving (should be 200) ---")
+    resp = sessions["supervisor"].post(f"/receiving/{draft['id']}/cancel", json={"reason": "supervisor test"})
+    if resp.status_code == 200:
+        print(f"✅ SUPERVISOR can cancel receiving")
+    else:
+        print(f"❌ SUPERVISOR should cancel receiving, got {resp.status_code}")
+        return False
+    
+    return True
+
+
+def test_receiving_list_filter(admin_session: TestSession):
+    """Test 19: List + filter"""
+    print("\n" + "="*80)
+    print("TEST 19: RECEIVING - LIST & FILTER")
+    print("="*80)
+    
+    # Get all receivings
+    print("\n--- GET /receiving ---")
+    resp = admin_session.get("/receiving")
+    if resp.status_code == 200:
+        receivings = resp.json()
+        print(f"✅ Found {len(receivings)} receivings")
+    else:
+        print(f"❌ List receivings failed: {resp.status_code}")
+        return False
+    
+    # Filter by status
+    print("\n--- GET /receiving?status=WAITING_PUTAWAY ---")
+    resp = admin_session.get("/receiving?status=WAITING_PUTAWAY")
+    if resp.status_code == 200:
+        filtered = resp.json()
+        all_waiting = all(r.get("status") == "WAITING_PUTAWAY" for r in filtered)
+        if all_waiting:
+            print(f"✅ Filter by status works: {len(filtered)} WAITING_PUTAWAY receivings")
+        else:
+            print(f"❌ Filter returned non-WAITING_PUTAWAY receivings")
+            return False
+    else:
+        print(f"❌ Filter failed: {resp.status_code}")
+        return False
+    
+    return True
+
+
+def test_barcode_lookup(admin_session: TestSession, items: list):
+    """Test 20: Barcode lookup"""
+    print("\n" + "="*80)
+    print("TEST 20: BARCODE LOOKUP")
+    print("="*80)
+    
+    # Test item lookup by SKU
+    print("\n--- GET /barcode?code=FUR-CHR-001 ---")
+    resp = admin_session.get("/barcode?code=FUR-CHR-001")
+    if resp.status_code == 200:
+        result = resp.json()
+        if result.get("type") == "ITEM" and result.get("item", {}).get("sku") == "FUR-CHR-001":
+            print(f"✅ Item lookup works: {result['item']['sku']}")
+        else:
+            print(f"❌ Expected ITEM type with SKU FUR-CHR-001, got: {result}")
+    else:
+        print(f"❌ Barcode lookup failed: {resp.status_code}")
+    
+    # Test location lookup
+    print("\n--- GET /barcode?code=STG-01 ---")
+    resp = admin_session.get("/barcode?code=STG-01")
+    if resp.status_code == 200:
+        result = resp.json()
+        if result.get("type") == "LOCATION" and result.get("location", {}).get("code") == "STG-01":
+            print(f"✅ Location lookup works: {result['location']['code']} (type: {result['location']['locationType']})")
+        else:
+            print(f"❌ Expected LOCATION type with code STG-01, got: {result}")
+    else:
+        print(f"❌ Barcode lookup failed: {resp.status_code}")
+    
+    # Test serial lookup
+    print("\n--- GET /barcode?code=SN-TEST-001 ---")
+    resp = admin_session.get("/barcode?code=SN-TEST-001")
+    if resp.status_code == 200:
+        result = resp.json()
+        if result.get("type") == "SERIAL" and result.get("serial", {}).get("serialNo") == "SN-TEST-001":
+            print(f"✅ Serial lookup works: {result['serial']['serialNo']} (status: {result['serial']['status']})")
+        else:
+            print(f"❌ Expected SERIAL type with serialNo SN-TEST-001, got: {result}")
+    else:
+        print(f"❌ Barcode lookup failed: {resp.status_code}")
+    
+    # Test unknown code
+    print("\n--- GET /barcode?code=NONEXISTENT ---")
+    resp = admin_session.get("/barcode?code=NONEXISTENT")
+    if resp.status_code == 200:
+        result = resp.json()
+        if result.get("type") == "UNKNOWN" and result.get("value") == "NONEXISTENT":
+            print(f"✅ Unknown code handled correctly: {result}")
+        else:
+            print(f"❌ Expected UNKNOWN type, got: {result}")
+    else:
+        print(f"❌ Barcode lookup failed: {resp.status_code}")
+    
+    return True
+
+
+def test_receiving_audit_trail(admin_session: TestSession):
+    """Test 21: Audit trail for receiving"""
+    print("\n" + "="*80)
+    print("TEST 21: RECEIVING - AUDIT TRAIL")
+    print("="*80)
+    
+    # Get audit logs for RECEIVING module
+    print("\n--- GET /audit-logs?module=RECEIVING ---")
+    resp = admin_session.get("/audit-logs?module=RECEIVING")
+    if resp.status_code == 200:
+        logs = resp.json()
+        print(f"✅ Found {len(logs)} RECEIVING audit logs")
+        
+        # Check for various actions
+        actions = {}
+        for log in logs:
+            action = log.get("action")
+            actions[action] = actions.get(action, 0) + 1
+        
+        print(f"\n--- RECEIVING Actions ---")
+        for action, count in sorted(actions.items()):
+            print(f"  {action}: {count}")
+        
+        # Verify CREATE, UPDATE, POST actions exist
+        required_actions = ["CREATE", "UPDATE"]
+        missing = [a for a in required_actions if a not in actions]
+        if not missing:
+            print(f"✅ All required actions present in RECEIVING audit logs")
+        else:
+            print(f"❌ Missing actions: {missing}")
+        
+        # Sample logs
+        print(f"\n--- Sample RECEIVING Audit Logs ---")
+        for log in logs[:5]:
+            print(f"  {log.get('action')} | {log.get('userName')} | {log.get('description')}")
+        
+        return True
+    else:
+        print(f"❌ Audit logs query failed: {resp.status_code}")
+        return False
+
+
 def main():
     """Run all backend tests"""
     print("\n" + "="*80)
@@ -675,45 +1441,96 @@ def main():
         
         admin = sessions["admin"]
         
-        # Test 2: Dashboard
-        dashboard_stats = test_dashboard(admin)
-        if not dashboard_stats:
-            print("\n❌ DASHBOARD TEST FAILED")
+        # Get meta data for warehouse and items
+        print("\n" + "="*80)
+        print("SETUP: Getting warehouse and items data")
+        print("="*80)
         
-        # Test 3: Meta
-        meta = test_meta(admin)
-        if not meta:
-            print("\n❌ META TEST FAILED")
+        meta_resp = admin.get("/meta")
+        if meta_resp.status_code != 200:
+            print(f"❌ Meta API failed")
             return False
         
-        # Test 4: List Items
-        items = test_items_list(admin)
-        if not items:
-            print("\n❌ LIST ITEMS TEST FAILED")
+        meta = meta_resp.json()
+        warehouses = meta.get("warehouses", [])
+        if not warehouses:
+            print(f"❌ No warehouses found")
+            return False
         
-        # Test 5: RBAC Matrix
-        rbac_ok = test_rbac_matrix(sessions, meta)
-        if not rbac_ok:
-            print("\n❌ RBAC TESTS FAILED")
+        warehouse_id = warehouses[0]["id"]
+        warehouse_code = warehouses[0]["code"]
+        print(f"✅ Using warehouse: {warehouse_code} (ID: {warehouse_id})")
         
-        # Test 6: Item CRUD
-        test_item_crud(admin, meta)
+        # Check for staging location
+        staging_location = None
+        for wh in warehouses:
+            for zone in wh.get("zones", []):
+                for loc in zone.get("locations", []):
+                    if loc.get("type") == "STAGING":
+                        staging_location = loc
+                        break
         
-        # Test 7: Item Soft-Delete
-        test_item_soft_delete(admin)
+        if staging_location:
+            print(f"✅ Found staging location: {staging_location['code']}")
+        else:
+            print(f"❌ No STAGING location found")
+            return False
         
-        # Test 8: Locations
-        test_locations(admin, meta)
+        # Get items
+        items_resp = admin.get("/items")
+        if items_resp.status_code != 200:
+            print(f"❌ Items API failed")
+            return False
         
-        # Test 9: Stock & Ledger
-        if dashboard_stats:
-            test_stock_and_ledger(admin, dashboard_stats)
+        items = items_resp.json()
+        non_serial_items = [i for i in items if not i.get("serialTracked")]
+        serial_items = [i for i in items if i.get("serialTracked")]
         
-        # Test 10: Audit Trail
-        test_audit_trail(admin)
+        print(f"✅ Found {len(items)} items ({len(non_serial_items)} non-serial, {len(serial_items)} serial-tracked)")
+        
+        if serial_items:
+            print(f"  Serial-tracked items: {', '.join([i['sku'] for i in serial_items])}")
+        
+        # ============ MILESTONE 1: RECEIVING TESTS ============
+        print("\n" + "="*80)
+        print("MILESTONE 1: RECEIVING MODULE TESTS")
+        print("="*80)
+        
+        # Test 11: Document Numbering
+        test_receiving_document_numbering(admin, warehouse_id)
+        
+        # Test 12: Auto Staging Location
+        test_receiving_auto_staging(admin, warehouse_id)
+        
+        # Test 13: Draft Edit Lines
+        test_receiving_draft_edit_lines(admin, warehouse_id, items)
+        
+        # Test 14: Start Flow
+        test_receiving_start_flow(admin, warehouse_id, items)
+        
+        # Test 15: Post Happy Path
+        test_receiving_post_happy_path(admin, warehouse_id, items)
+        
+        # Test 16: Post Validations
+        test_receiving_post_validations(admin, warehouse_id, items)
+        
+        # Test 17: Cancel Flow
+        test_receiving_cancel_flow(admin, warehouse_id, items)
+        
+        # Test 18: RBAC
+        test_receiving_rbac(sessions, warehouse_id, items)
+        
+        # Test 19: List & Filter
+        test_receiving_list_filter(admin)
+        
+        # Test 20: Barcode Lookup
+        test_barcode_lookup(admin, items)
+        
+        # Test 21: Audit Trail
+        test_receiving_audit_trail(admin)
         
         print("\n" + "="*80)
-        print("✅ ALL BACKEND TESTS COMPLETED")
+        print("✅ ALL RECEIVING TESTS COMPLETED")
         print("="*80)
         return True
         

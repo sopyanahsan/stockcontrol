@@ -3,6 +3,16 @@ import prisma from '@/lib/prisma'
 import { getAuthUser, verifyPassword, createAccessToken, accessCookie, clearCookie, canManageMaster } from '@/lib/auth'
 import { logAudit } from '@/lib/audit'
 import { getStockOnHand } from '@/lib/stock'
+import {
+  createReceivingDraft,
+  updateReceivingDraft,
+  startReceiving,
+  postReceiving,
+  cancelReceiving,
+  listReceivings,
+  getReceiving,
+} from '@/lib/receiving-service'
+import { lookupByBarcode } from '@/lib/barcode-service'
 
 const json = (data, status = 200) => NextResponse.json(data, { status })
 const err = (message, status = 400) => NextResponse.json({ error: message }, { status })
@@ -130,6 +140,7 @@ async function createItem(request, user) {
       maxStock: Number(b.maxStock) || 0,
       reorderPoint: Number(b.reorderPoint) || 0,
       unitCost: Number(b.unitCost) || 0,
+      serialTracked: Boolean(b.serialTracked) || false,
     },
   })
   await logAudit({ user, action: 'CREATE', module: 'MASTER_ITEM', entityType: 'Item', entityId: item.id, description: `Created item ${item.sku} - ${item.name}`, after: item })
@@ -153,6 +164,7 @@ async function updateItem(request, user, id) {
       maxStock: b.maxStock !== undefined ? Number(b.maxStock) : before.maxStock,
       reorderPoint: b.reorderPoint !== undefined ? Number(b.reorderPoint) : before.reorderPoint,
       unitCost: b.unitCost !== undefined ? Number(b.unitCost) : before.unitCost,
+      serialTracked: b.serialTracked !== undefined ? Boolean(b.serialTracked) : before.serialTracked,
       isActive: b.isActive !== undefined ? Boolean(b.isActive) : before.isActive,
     },
   })
@@ -348,6 +360,68 @@ async function route(request, ctx) {
     if (seg === 'stock' && method === 'GET') return json(await getStockOnHand())
     if (seg === 'ledger' && method === 'GET') return await listLedger(searchParams)
     if (seg === 'audit-logs' && method === 'GET') return await listAuditLogs(searchParams)
+
+    // ==================== BARCODE LOOKUP ====================
+    if (seg === 'barcode' && method === 'GET') {
+      const code = searchParams.get('code')
+      if (!code) return err('code is required')
+      const result = await lookupByBarcode(code)
+      return json(result)
+    }
+
+    // ==================== RECEIVING ====================
+    if (seg === 'receiving') {
+      if (!path[1]) {
+        if (method === 'GET') {
+          const rs = await listReceivings({
+            status: searchParams.get('status'),
+            warehouseId: searchParams.get('warehouseId'),
+            take: Number(searchParams.get('limit')) || 100,
+          })
+          return json(rs)
+        }
+        if (method === 'POST') {
+          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          const body = await parseBody(request)
+          try {
+            const r = await createReceivingDraft({ user, body })
+            return json(r, 201)
+          } catch (e) { return err(e.message, 400) }
+        }
+      } else {
+        const id = path[1]
+        const sub = path[2]
+        if (!sub) {
+          if (method === 'GET') {
+            const r = await getReceiving(id)
+            if (!r) return err('Receiving not found', 404)
+            return json(r)
+          }
+          if (method === 'PUT') {
+            if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+            const body = await parseBody(request)
+            try {
+              const r = await updateReceivingDraft({ user, id, body })
+              return json(r)
+            } catch (e) { return err(e.message, 400) }
+          }
+        } else if (sub === 'start' && method === 'POST') {
+          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          try { return json(await startReceiving({ user, id })) }
+          catch (e) { return err(e.message, 400) }
+        } else if (sub === 'post' && method === 'POST') {
+          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          const body = await parseBody(request)
+          try { return json(await postReceiving({ user, id, body })) }
+          catch (e) { return err(e.message, 400) }
+        } else if (sub === 'cancel' && method === 'POST') {
+          if (!canManageMaster(user.role)) return err('Only Administrator or Supervisor can cancel', 403)
+          const body = await parseBody(request)
+          try { return json(await cancelReceiving({ user, id, reason: body?.reason })) }
+          catch (e) { return err(e.message, 400) }
+        }
+      }
+    }
 
     return err('Not found', 404)
   } catch (e) {

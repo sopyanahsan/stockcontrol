@@ -35,6 +35,7 @@ const itemSchema = z.object({
   reorderPoint: z.coerce.number().min(0),
   maxStock: z.coerce.number().min(0),
   unitCost: z.coerce.number().min(0),
+  serialTracked: z.boolean().default(false),
 })
 
 const fmt = (n) => new Intl.NumberFormat('en-US').format(n || 0)
@@ -54,12 +55,12 @@ const App = () => {
 
   const form = useForm({
     resolver: zodResolver(itemSchema),
-    defaultValues: { sku: '', name: '', description: '', barcode: '', categoryId: '', uomId: '', minStock: 0, reorderPoint: 0, maxStock: 0, unitCost: 0 },
+    defaultValues: { sku: '', name: '', description: '', barcode: '', categoryId: '', uomId: '', minStock: 0, reorderPoint: 0, maxStock: 0, unitCost: 0, serialTracked: false },
   })
 
   const openCreate = () => {
     setEditing(null)
-    form.reset({ sku: '', name: '', description: '', barcode: '', categoryId: '', uomId: '', minStock: 0, reorderPoint: 0, maxStock: 0, unitCost: 0 })
+    form.reset({ sku: '', name: '', description: '', barcode: '', categoryId: '', uomId: '', minStock: 0, reorderPoint: 0, maxStock: 0, unitCost: 0, serialTracked: false })
     setDialogOpen(true)
   }
 
@@ -69,6 +70,7 @@ const App = () => {
       sku: item.sku, name: item.name, description: item.description || '', barcode: item.barcode || '',
       categoryId: item.categoryId, uomId: item.uomId,
       minStock: item.minStock, reorderPoint: item.reorderPoint, maxStock: item.maxStock, unitCost: item.unitCost,
+      serialTracked: !!item.serialTracked,
     })
     setDialogOpen(true)
   }
@@ -227,6 +229,18 @@ const App = () => {
                 <Label className="text-xs">Unit Cost ($)</Label>
                 <Input type="number" step="any" {...form.register('unitCost')} className="h-8 text-xs" />
               </div>
+            </div>
+            <div className="flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 p-2.5">
+              <input
+                id="serialTracked"
+                type="checkbox"
+                {...form.register('serialTracked')}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="serialTracked" className="text-xs">
+                <span className="font-medium">Serial-tracked item</span>
+                <span className="ml-2 text-gray-500">Every unit must have a unique serial number captured on Receiving.</span>
+              </label>
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Description</Label>

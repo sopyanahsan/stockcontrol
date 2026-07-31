@@ -106,16 +106,16 @@ async function main() {
     { sku: 'HRD-SCR-001', name: 'Wood Screw 4x40mm (500 pack)', category: 'Hardware', uom: 'BOX', minStock: 50, reorderPoint: 80, maxStock: 500, unitCost: 12 },
     { sku: 'HRD-HNG-002', name: 'Door Hinge Stainless 3 inch', category: 'Hardware', uom: 'BOX', minStock: 30, reorderPoint: 50, maxStock: 300, unitCost: 18 },
     { sku: 'ELC-CBL-001', name: 'Power Cable 3m EU Plug', category: 'Electronics', uom: 'PCS', minStock: 100, reorderPoint: 150, maxStock: 1000, unitCost: 4.5 },
-    { sku: 'ELC-LED-002', name: 'LED Panel Light 60x60', category: 'Electronics', uom: 'PCS', minStock: 40, reorderPoint: 60, maxStock: 400, unitCost: 22 },
+    { sku: 'ELC-LED-002', name: 'LED Panel Light 60x60', category: 'Electronics', uom: 'PCS', minStock: 40, reorderPoint: 60, maxStock: 400, unitCost: 22, serialTracked: true },
     { sku: 'PKG-BOX-001', name: 'Carton Box Large 60x40x40', category: 'Packaging', uom: 'PCS', minStock: 200, reorderPoint: 300, maxStock: 2000, unitCost: 1.2 },
     { sku: 'PKG-WRP-002', name: 'Stretch Wrap Film 50cm Roll', category: 'Packaging', uom: 'PCS', minStock: 60, reorderPoint: 100, maxStock: 600, unitCost: 8 },
-    { sku: 'TLS-DRL-001', name: 'Cordless Drill 18V Kit', category: 'Tools', uom: 'PCS', minStock: 10, reorderPoint: 15, maxStock: 80, unitCost: 95 },
+    { sku: 'TLS-DRL-001', name: 'Cordless Drill 18V Kit', category: 'Tools', uom: 'PCS', minStock: 10, reorderPoint: 15, maxStock: 80, unitCost: 95, serialTracked: true },
   ]
   const items = {}
   for (const it of itemData) {
     items[it.sku] = await prisma.item.upsert({
       where: { sku: it.sku },
-      update: {},
+      update: { serialTracked: it.serialTracked || false },
       create: {
         sku: it.sku,
         name: it.name,
@@ -126,6 +126,7 @@ async function main() {
         maxStock: it.maxStock,
         unitCost: it.unitCost,
         barcode: it.sku,
+        serialTracked: it.serialTracked || false,
       },
     })
   }
