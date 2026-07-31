@@ -305,7 +305,8 @@ model PutawayTask {
   receivingLine   ReceivingLine?    @relation(fields: [receivingLineId], references: [id])
   itemId          String
   item            Item              @relation(fields: [itemId], references: [id])
-  qty             Float
+  qty             Float             // Total qty to put away
+  qtyPutaway      Float             @default(0) // Accumulated qty already put away (supports partial)
   fromLocationId  String
   fromLocation    Location          @relation("PutawayFrom", fields: [fromLocationId], references: [id])
   toLocationId    String?

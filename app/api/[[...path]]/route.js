@@ -12,6 +12,13 @@ import {
   listReceivings,
   getReceiving,
 } from '@/lib/receiving-service'
+import {
+  listPutawayTasks,
+  getPutawayTask,
+  startPutawayTask,
+  completePutawayTask,
+  cancelPutawayTask,
+} from '@/lib/putaway-service'
 import { lookupByBarcode } from '@/lib/barcode-service'
 
 const json = (data, status = 200) => NextResponse.json(data, { status })
@@ -418,6 +425,44 @@ async function route(request, ctx) {
           if (!canManageMaster(user.role)) return err('Only Administrator or Supervisor can cancel', 403)
           const body = await parseBody(request)
           try { return json(await cancelReceiving({ user, id, reason: body?.reason })) }
+          catch (e) { return err(e.message, 400) }
+        }
+      }
+    }
+
+    // ==================== PUTAWAY ====================
+    if (seg === 'putaway') {
+      if (!path[1]) {
+        if (method === 'GET') {
+          const tasks = await listPutawayTasks({
+            status: searchParams.get('status') || undefined,
+            warehouseId: searchParams.get('warehouseId') || undefined,
+            take: Number(searchParams.get('limit')) || 100,
+          })
+          return json(tasks)
+        }
+      } else {
+        const id = path[1]
+        const sub = path[2]
+        if (!sub) {
+          if (method === 'GET') {
+            const task = await getPutawayTask(id)
+            if (!task) return err('Putaway task not found', 404)
+            return json(task)
+          }
+        } else if (sub === 'start' && method === 'POST') {
+          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          try { return json(await startPutawayTask({ user, id })) }
+          catch (e) { return err(e.message, 400) }
+        } else if (sub === 'complete' && method === 'POST') {
+          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          const body = await parseBody(request)
+          try { return json(await completePutawayTask({ user, id, body })) }
+          catch (e) { return err(e.message, 400) }
+        } else if (sub === 'cancel' && method === 'POST') {
+          if (!canManageMaster(user.role)) return err('Only Administrator or Supervisor can cancel', 403)
+          const body = await parseBody(request)
+          try { return json(await cancelPutawayTask({ user, id, reason: body?.reason })) }
           catch (e) { return err(e.message, 400) }
         }
       }

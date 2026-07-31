@@ -73,7 +73,7 @@ const App = ({ params }) => {
 
   // ---------- Lines (draft edit) ----------
   const [draftLines, setDraftLines] = useState(null) // null => not yet initialized
-  const linesForEdit = draftLines ?? data?.lines?.map((l) => ({
+  const linesForEdit = draftLines ?? ((data?.lines?.map((l) => ({
     id: l.id,
     itemId: l.itemId,
     itemLabel: l.item ? `${l.item.sku} - ${l.item.name}` : '',
@@ -82,7 +82,7 @@ const App = ({ params }) => {
     receivedQty: l.receivedQty || 0,
     unitCost: l.unitCost || 0,
     batchNo: l.batchNo || '',
-  })) || []
+  })) || []))
 
   const setEditLines = (updater) => setDraftLines((prev) => {
     const base = prev ?? (data?.lines?.map((l) => ({

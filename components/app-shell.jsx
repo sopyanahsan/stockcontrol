@@ -37,7 +37,7 @@ const NAV_SECTIONS = [
     items: [
       { href: '/stock', label: 'Stock on Hand', icon: Boxes },
       { href: '/receiving', label: 'Receiving', icon: Truck },
-      { href: '/putaway', label: 'Putaway', icon: PackageOpen, soon: true },
+      { href: '/putaway', label: 'Putaway', icon: PackageOpen },
       { href: '/movements', label: 'Stock Movement', icon: ArrowRightLeft, soon: true },
       { href: '/adjustments', label: 'Stock Adjustment', icon: SlidersHorizontal, soon: true },
     ],
