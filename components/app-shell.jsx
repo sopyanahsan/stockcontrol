@@ -8,7 +8,7 @@ import { api } from '@/lib/api-client'
 import {
   LayoutDashboard, Package, MapPin, Boxes, ClipboardList, Truck, ArrowRightLeft,
   SlidersHorizontal, CalendarCheck, FileSearch, BarChart3, ChevronsLeft, ChevronsRight,
-  Search, LogOut, PackageOpen, Warehouse, ScrollText,
+  Search, LogOut, PackageOpen, Warehouse, ScrollText, Ship,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -38,14 +38,17 @@ const NAV_SECTIONS = [
       { href: '/stock', label: 'Stock on Hand', icon: Boxes },
       { href: '/receiving', label: 'Receiving', icon: Truck },
       { href: '/putaway', label: 'Putaway', icon: PackageOpen },
-      { href: '/movements', label: 'Stock Movement', icon: ArrowRightLeft, soon: true },
-      { href: '/adjustments', label: 'Stock Adjustment', icon: SlidersHorizontal, soon: true },
+      { href: '/picking', label: 'Picking', icon: ClipboardList },
+      { href: '/packing', label: 'Packing', icon: Package },
+      { href: '/shipping', label: 'Shipping', icon: Ship },
+      { href: '/movements', label: 'Stock Movement', icon: ArrowRightLeft },
+      { href: '/adjustments', label: 'Stock Adjustment', icon: SlidersHorizontal },
     ],
   },
   {
     label: 'Inventory Control',
     items: [
-      { href: '/cycle-count', label: 'Cycle Count', icon: ClipboardList, soon: true },
+      { href: '/cycle-count', label: 'Cycle Count', icon: ClipboardList },
       { href: '/stock-opname', label: 'Stock Opname', icon: CalendarCheck, soon: true },
     ],
   },

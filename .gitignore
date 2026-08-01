@@ -1,8 +1,22 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
+# Environment
+.env
+.env.local
+.env.*
+!.env.example
+# Prisma
+prisma/dev.db
+prisma/dev.db-journal
+*.log
+logs/
+Thumbs.db
+Desktop.ini
 # IDE and editors
 .idea/
 .vscode/
+.emergent/
+.qwen/
+
 
 # Dependencies
 node_modules/
@@ -28,7 +42,6 @@ next-env.d.ts
 # Production builds
 /build
 dist/
-dist
 
 # Environment files (comprehensive coverage)
 *token.json*

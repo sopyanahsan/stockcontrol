@@ -5,7 +5,7 @@ import { api } from '@/lib/api-client'
 import AppShell from '@/components/app-shell'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
-import { Package, Boxes, DollarSign, AlertTriangle, Activity, MapPin } from 'lucide-react'
+import { Package, Boxes, DollarSign, AlertTriangle, Activity, MapPin, ClipboardList, Clock, Target, CheckCircle2, PackageCheck, Layers } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer,
   AreaChart, Area, Legend,
@@ -41,8 +41,26 @@ function StatCard({ icon: Icon, label, value, sub, accent = 'text-blue-600 bg-bl
   )
 }
 
+function PickingCard({ icon: Icon, label, value, sub, accent = 'text-orange-600 bg-orange-50' }) {
+  return (
+    <div className="rounded-md border border-orange-200 bg-white p-3 shadow-sm">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-[11px] text-gray-500">{label}</div>
+          <div className="mt-0.5 text-lg font-semibold tabular-nums">{value}</div>
+          {sub && <div className="mt-0.5 text-[10px] text-gray-400">{sub}</div>}
+        </div>
+        <div className={`rounded-md p-1.5 ${accent}`}>
+          <Icon className="h-3.5 w-3.5" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const App = () => {
   const { data, isLoading } = useQuery({ queryKey: ['dashboard'], queryFn: () => api('/dashboard') })
+  const { data: packingData } = useQuery({ queryKey: ['packing-kpis'], queryFn: () => api('/packing/kpis') })
 
   return (
     <AppShell title="Dashboard" subtitle="Inventory overview — all figures computed live from the Stock Ledger">
@@ -66,6 +84,36 @@ const App = () => {
             <StatCard icon={Boxes} label="Stock on Hand" value={fmt(data?.stats?.totalUnits)} sub="units across all locations" accent="text-indigo-600 bg-indigo-50" />
             <StatCard icon={DollarSign} label="Inventory Value" value={fmtMoney(data?.stats?.totalValue)} sub="at standard cost" accent="text-green-600 bg-green-50" />
             <StatCard icon={AlertTriangle} label="Low Stock Alerts" value={fmt(data?.stats?.lowStockCount)} sub={`${fmt(data?.stats?.todayMovements)} movements today`} accent="text-amber-600 bg-amber-50" />
+          </div>
+
+          {/* Picking KPIs */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
+              <ClipboardList className="h-3.5 w-3.5" />
+              Picking Performance
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+              <PickingCard icon={ClipboardList} label="Pending Picking" value={fmt(data?.picking?.pendingPicking)} sub="orders queued" accent="text-blue-600 bg-blue-50" />
+              <PickingCard icon={Activity} label="In Progress" value={fmt(data?.picking?.pickingInProgress)} sub="being picked" accent="text-amber-600 bg-amber-50" />
+              <PickingCard icon={CheckCircle2} label="Completed Today" value={fmt(data?.picking?.pickingCompletedToday)} sub="orders done" accent="text-green-600 bg-green-50" />
+              <PickingCard icon={Clock} label="Avg Pick Time" value={data?.picking?.avgPickTimeMinutes ? data.picking.avgPickTimeMinutes + 'm' : '—'} sub="per order" accent="text-purple-600 bg-purple-50" />
+              <PickingCard icon={Target} label="Picking Accuracy" value={data?.picking?.pickingAccuracy != null ? data.picking.pickingAccuracy + '%' : '—'} sub="last 30 days" accent="text-orange-600 bg-orange-50" />
+            </div>
+          </div>
+
+          {/* Packing KPIs */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
+              <PackageCheck className="h-3.5 w-3.5" />
+              Packing Performance
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+              <PickingCard icon={Layers} label="Packing Queue" value={fmt(packingData?.packingQueue)} sub="awaiting packing" accent="text-blue-600 bg-blue-50" />
+              <PickingCard icon={PackageCheck} label="Open Packages" value={fmt(packingData?.openPackages)} sub="being packed" accent="text-amber-600 bg-amber-50" />
+              <PickingCard icon={CheckCircle2} label="Closed Today" value={fmt(packingData?.packagesClosedToday)} sub="packages closed" accent="text-green-600 bg-green-50" />
+              <PickingCard icon={Clock} label="Avg Packing Time" value={packingData?.avgPackingTimeMinutes ? packingData.avgPackingTimeMinutes + 'm' : '—'} sub="per order" accent="text-purple-600 bg-purple-50" />
+              <PickingCard icon={Target} label="Package Accuracy" value={packingData?.packingAccuracy != null ? packingData.packingAccuracy + '%' : '—'} sub="last 30 days" accent="text-orange-600 bg-orange-50" />
+            </div>
           </div>
 
           {/* Charts */}
