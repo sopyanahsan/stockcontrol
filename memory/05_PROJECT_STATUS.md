@@ -29,15 +29,19 @@ The system focuses on:
 
 **Current Milestone**
 
-✅ Milestone 7 — Shipping (In Progress)
+✅ Milestone 7 — Shipping (Complete)
 
 **Next Milestone**
 
 Milestone 8 — Reports & Analytics
 
+**Backfill Required**
+
+Shipping uses `PackageAllocation` junction table. Run `node scripts/backfill-package-allocations.js` once for any pre-existing PackageItem records.
+
 **Current Version**
 
-v0.7.0
+v0.8.0
 
 **Project Status**
 
@@ -55,7 +59,7 @@ Active Development
 | Milestone 4 | Adjustment & Cycle Count | ✅ Complete |
 | Milestone 5 | Picking | ✅ Complete |
 | Milestone 6 | Packing | ✅ Complete |
-| Milestone 7 | Shipping | 🚧 In Progress |
+| Milestone 7 | Shipping | ✅ Complete |
 
 ---
 
@@ -203,46 +207,64 @@ Active Development
 
 **Status**
 
-🚧 In Progress
+✅ Complete
 
-### Planned Features
+### Features
 
 - Shipment Order
 - Shipment Package
-- Package Verification
-- Shipment Confirmation
-- SHIP_OUT Ledger
-- FIFO Consumption
-- Package Lock
+- Package Verification (QUEUED → IN_PROGRESS → READY)
+- Shipment Confirmation (READY → COMPLETED)
+- SHIP_OUT Ledger entries
+- FIFO Consumption via PackageAllocation chain
+- Package Lock (CONFIRMED) — immutable after COMPLETED
 - Shipping KPI
 - Shipping Audit Trail
+- Retry FAILED shipment
+- Cancel QUEUE/IN_PROGRESS shipments
+- Serial validation at verifyPackage
+- Shipment Preview with ledger impact
 
 ---
 
 # Current Core Modules
 
-### Security
+## Security
 
 - Authentication
-- RBAC
+- Role-Based Access Control (RBAC)
 
-### Master Data
+---
+
+## Master Data
 
 - Master Item
 - Warehouse Location
 
-### Warehouse Operations
+---
+
+## Warehouse Operations
+
+### Inbound Operations
 
 - Receiving
 - Putaway
+
+### Internal Operations
+
 - Stock Movement
-- Adjustment
+- Stock Adjustment
 - Cycle Count
+
+### Outbound Operations
+
 - Picking
 - Packing
-- Shipping (In Progress)
+- Shipping
 
-### Inventory Engine
+---
+
+## Inventory Engine
 
 - FIFO Engine
 - Stock Ledger
@@ -254,43 +276,65 @@ Active Development
 
 # Core Services
 
+## Validation
+
 - stock-validation.js
-- fifo-service.js
+
+## Warehouse Services
+
+- receiving-service.js
+- putaway-service.js
 - movement-service.js
 - adjustment-service.js
 - cycle-count-service.js
 - picking-service.js
 - packing-service.js
 - shipping-service.js
+
+## Shared Services
+
+- fifo-service.js
+- barcode-service.js
 - doc-numbering.js
 - audit.js
-- barcode-service.js
 
 ---
 
 # Technology Stack
 
-### Frontend
+## Frontend
 
-- Next.js App Router
-- React
+- Next.js 15 (App Router)
+- React 18
 - Tailwind CSS
 - Radix UI
+- React Hook Form
+- TanStack React Query
+- Framer Motion
 
-### Backend
+---
+
+## Backend
 
 - Next.js API Routes
 - Service Layer Architecture
+- RESTful API Design
 
-### Database
+---
+
+## Database
 
 - Neon PostgreSQL
 
-### ORM
+---
 
-- Prisma
+## ORM
 
-### Transactions
+- Prisma ORM
+
+---
+
+## Transactions
 
 - Prisma.$transaction()
 
@@ -298,22 +342,137 @@ Active Development
 
 # Architecture Principles
 
-- Stock Ledger is the Single Source of Truth
-- Inventory MUST NEVER be edited directly
-- FIFO is mandatory
-- Every transaction MUST generate an Audit Trail
-- Barcode-first warehouse workflow
-- Service Layer architecture
-- Feature-based module organization
+The system follows these core architectural principles:
+
+- Stock Ledger is the Single Source of Truth.
+- Inventory quantities are NEVER edited directly.
+- FIFO allocation is mandatory for all inventory consumption.
+- Every inventory transaction MUST generate a Stock Ledger entry.
+- Every business transaction MUST generate an Audit Trail.
+- Barcode-first warehouse workflow.
+- Feature-based modular architecture.
+- Service Layer pattern for all business logic.
+- Atomic database transactions using Prisma.
+- End-to-end inventory traceability from Receiving to Shipping.
 
 ---
 
 # Current Goal
 
-Complete **Milestone 7 — Shipping Module**
+## ✅ Milestone 7 — Shipping Module
 
-After Shipping is complete, continue with:
+**Status:** Completed
 
-- Milestone 8 — Reports & Analytics
-- Milestone 9 — Multi Warehouse
-- Milestone 10 — Production Hardening
+### Completed Features
+
+- Shipment Management
+- Shipment Package Verification
+- Package Allocation Traceability
+- Reserved FIFO Consumption
+- SHIP_OUT Stock Ledger Posting
+- Serial Number Validation
+- Package Locking
+- Shipping Dashboard KPI
+- Shipping Audit Trail
+- End-to-End Traceability (Receiving → Shipping)
+
+---
+
+# Next Roadmap
+
+## Milestone 8 — Reports & Analytics
+
+### Operational Reports
+
+- Inventory Dashboard
+- Executive Dashboard
+- Stock Card Report
+- Inventory Aging Report
+- FIFO Aging Report
+- Receiving Report
+- Putaway Report
+- Stock Movement Report
+- Stock Adjustment Report
+- Cycle Count Report
+- Picking Report
+- Packing Report
+- Shipping Report
+
+### Export Features
+
+- Export to Excel
+- Export to PDF
+
+---
+
+## Milestone 9 — Multi Warehouse
+
+### Warehouse Management
+
+- Multiple Warehouse Support
+- Warehouse-specific Inventory
+- Inter-Warehouse Transfer
+- Warehouse Dashboard
+- Warehouse Performance KPI
+
+---
+
+## Milestone 10 — Production Hardening
+
+### Enterprise Readiness
+
+- Performance Optimization
+- Database Optimization
+- Background Job Processing
+- Concurrency & Stress Testing
+- Monitoring & Logging
+- Backup & Disaster Recovery
+- Security Hardening
+- CI/CD Pipeline
+- Production Deployment
+- Technical Documentation
+- API Documentation
+- User Documentation
+
+---
+
+# Overall Project Progress
+
+| Milestone | Module | Status |
+|------------|--------|--------|
+| Milestone 1 | Core Foundation | ✅ Completed |
+| Milestone 2 | Putaway | ✅ Completed |
+| Milestone 3 | Stock Movement | ✅ Completed |
+| Milestone 4 | Stock Adjustment & Cycle Count | ✅ Completed |
+| Milestone 5 | Picking | ✅ Completed |
+| Milestone 6 | Packing | ✅ Completed |
+| Milestone 7 | Shipping | ✅ Completed |
+| Milestone 8 | Reports & Analytics | ⏳ Planned |
+| Milestone 9 | Multi Warehouse | ⏳ Planned |
+| Milestone 10 | Production Hardening | ⏳ Planned |
+
+---
+
+# Project Summary
+
+**Current Version:** `v0.7.0`
+
+**Project Status:** Active Development
+
+**Completed Milestones:** **7 / 10**
+
+**Project Completion:** **70%**
+
+The Warehouse Management System now supports a complete warehouse operational workflow:
+
+Receiving → Putaway → Stock Movement → Stock Adjustment → Cycle Count → Picking → Packing → Shipping
+
+with full support for:
+
+- FIFO Inventory Management
+- Stock Ledger
+- Audit Trail
+- Barcode Operations
+- Serial Number Tracking
+- Warehouse Location Management
+- End-to-End Inventory Traceability

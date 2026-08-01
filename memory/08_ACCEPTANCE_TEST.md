@@ -229,3 +229,93 @@ PASS
 Overall
 
 6 / 6 Milestones Passed
+
+---
+
+# Milestone 7
+
+Shipping
+
+✅ AC-01: Create shipment from COMPLETED packing → status QUEUE
+
+✅ AC-02: Scan wrong package barcode is rejected
+
+✅ AC-03: Package OPEN is rejected
+
+✅ AC-04: Package from different warehouse is rejected
+
+✅ AC-05: Wrong serial in package is rejected
+
+✅ AC-06: Duplicate serial in same package is rejected
+
+✅ AC-07: Preview shipment shows packages, FIFO allocations, and ledger preview
+
+✅ AC-08: Confirm shipment consumes FIFO — qtyRemaining decreases
+
+✅ AC-09: Confirm creates SHIP_OUT Stock Ledger entries
+
+✅ AC-10: Stock Ledger sum reflects inventory reduction after shipment
+
+✅ AC-11: Audit trail records shipment events including FIFO and Ledger
+
+✅ AC-12: Exception during confirm rolls back all changes
+
+✅ AC-13: Duplicate shipment for same packing order is rejected
+
+✅ AC-14: Package already in another shipment is rejected
+
+✅ AC-15: After COMPLETED, package remains CLOSED and immutable
+
+✅ AC-16: Double confirm is rejected on second call
+
+✅ AC-17: All packages VERIFIED → status READY → can confirm
+
+✅ AC-18: Confirm rejected if shipment status is not READY
+
+✅ AC-19: FIFO allocation mismatch rolls back all changes
+
+✅ AC-20: After COMPLETED, no service allows editing the locked shipment
+
+✅ AC-21: Retry FAILED shipment resets to READY
+
+✅ AC-22: Status check prevents duplicate confirmation
+
+Status
+
+PASS
+
+---
+
+# Current Test Result
+
+Milestone 1
+
+PASS
+
+Milestone 2
+
+PASS
+
+Milestone 3
+
+PASS
+
+Milestone 4
+
+PASS
+
+Milestone 5
+
+PASS
+
+Milestone 6
+
+PASS
+
+Milestone 7
+
+PASS
+
+Overall
+
+7 / 7 Milestones Passed

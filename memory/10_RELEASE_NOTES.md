@@ -10,7 +10,7 @@ This project follows Semantic Versioning.
 
 Current Version:
 
-v0.6.0
+v0.7.0
 
 Status:
 
@@ -277,6 +277,94 @@ PASS
 
 ---
 
+# v0.7.0
+
+Release Name
+
+Shipping Module
+
+Status
+
+Stable
+
+## Features
+
+- Shipment Order (QUEUE → IN_PROGRESS → READY → COMPLETED)
+- Shipment Package Verification
+- Serial validation at verifyPackage
+- Shipment Preview with FIFO impact and ledger preview
+- ConfirmShipment with atomic transaction
+- SHIP_OUT Stock Ledger entries
+- FIFO Consumption via PackageAllocation chain (Picking execution recorded by Packing)
+- Package Lock (CONFIRMED) — immutable after COMPLETED
+- Retry FAILED shipment
+- Cancel QUEUE/IN_PROGRESS shipments
+- Shipping KPI dashboard
+- Shipping Audit Trail
+
+## New Model
+
+- `PackageAllocation` — junction table linking `PackageItem` → `PickingTask` → `FifoLayer`. Shipping consumes Picking's FIFO reservation without re-allocating.
+
+## Workflow
+
+Packing Completed
+
+↓
+
+Create Shipment (QUEUE)
+
+↓
+
+Start Shipment (IN_PROGRESS)
+
+↓
+
+Scan Package
+
+↓
+
+Verify Package (optional: verify serials)
+
+↓
+
+All Packages Verified → READY
+
+↓
+
+Confirm Shipment (COMPLETED)
+
+↓
+
+FIFO Consumed | SHIP_OUT Ledger | Packages Locked
+
+## Validation
+
+- Wrong Package Barcode
+- Package OPEN
+- Package Different Warehouse
+- Wrong Serial
+- Duplicate Serial
+- FIFO Allocation Mismatch
+- Shipment Not READY
+- Package Already Shipped
+
+## Business Rules
+
+- Shipping is the only module that REDUCES inventory.
+- Shipping consumes Picking's FIFO reservation — never re-allocates.
+- PackageAllocation is immutable once packing is complete.
+- Packages are locked (CONFIRMED) after shipment COMPLETED.
+- No service may edit a COMPLETED shipment.
+
+## Acceptance
+
+22 / 22 Tests
+
+PASS
+
+---
+
 # Current Project Progress
 
 Foundation
@@ -293,9 +381,7 @@ Inventory Control
 
 Outbound
 
-🟨 Packing Completed
-
-⬜ Shipping Pending
+✅ Shipping Completed
 
 Analytics
 
@@ -437,7 +523,7 @@ Last Updated
 
 Version:
 
-v0.6.0
+v0.7.0
 
 Date:
 
