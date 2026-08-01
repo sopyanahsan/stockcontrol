@@ -100,6 +100,89 @@ import {
 } from '@/lib/shipping-service'
 import { lookupByBarcode } from '@/lib/barcode-service'
 
+// ---------- Report Services ----------
+import { getDashboardReport } from '@/lib/reports/dashboard-report'
+import { getInventoryReport } from '@/lib/reports/inventory-report'
+import { getOperationsReport } from '@/lib/reports/operations-report'
+import { getAuditReport, getAuditFilterOptions } from '@/lib/reports/audit-report'
+
+// ---------- Report Type Constants ----------
+const InventoryReportType = {
+  STOCK_ON_HAND: 'stock-on-hand',
+  STOCK_CARD: 'stock-card',
+  INVENTORY_AGING: 'inventory-aging',
+  FIFO_AGING: 'fifo-aging',
+  DEAD_STOCK: 'dead-stock',
+}
+
+const OperationsReportType = {
+  RECEIVING: 'receiving',
+  PUTAWAY: 'putaway',
+  MOVEMENT: 'movement',
+  ADJUSTMENT: 'adjustment',
+  CYCLE_COUNT: 'cycle-count',
+  PICKING: 'picking',
+  PACKING: 'packing',
+  SHIPPING: 'shipping',
+}
+
+const AuditReportType = {
+  AUDIT_TRAIL: 'audit-trail',
+  USER_ACTIVITY: 'user-activity',
+  INVENTORY_HISTORY: 'inventory-history',
+}
+
+// ---------- Standard Report Response ----------
+function reportResponse(report, result, filters, options = {}) {
+  return json({
+    success: true,
+    report,
+    filters,
+    summary: result.summary || null,
+    pagination: {
+      total: result.total || result.data?.length || 0,
+      limit: Number(filters.limit) || 500,
+      offset: Number(filters.offset) || 0,
+    },
+    data: result.data || result,
+    ...options,
+  })
+}
+
+// ---------- RBAC for Reports ----------
+const canViewReports = (role) =>
+  role === 'ADMINISTRATOR' || role === 'SUPERVISOR' || role === 'STOCK_CONTROL'
+
+// ---------- Shared Filter Extractor ----------
+function extractFilters(searchParams) {
+  const limit = Math.min(Number(searchParams.get('limit')) || 500, 1000)
+  const offset = Number(searchParams.get('offset')) || 0
+  const bucketsParam = searchParams.get('buckets')
+  let buckets
+  if (bucketsParam) {
+    try { buckets = JSON.parse(bucketsParam) } catch { buckets = undefined }
+  }
+  return {
+    warehouseId: searchParams.get('warehouseId') || undefined,
+    locationId: searchParams.get('locationId') || undefined,
+    itemId: searchParams.get('itemId') || undefined,
+    categoryId: searchParams.get('categoryId') || undefined,
+    fromDate: searchParams.get('fromDate') || undefined,
+    toDate: searchParams.get('toDate') || undefined,
+    status: searchParams.get('status') || undefined,
+    operatorId: searchParams.get('operatorId') || undefined,
+    documentNumber: searchParams.get('documentNumber') || undefined,
+    assignedToId: searchParams.get('assignedToId') || undefined,
+    supplier: searchParams.get('supplier') || undefined,
+    txnType: searchParams.get('txnType') || undefined,
+    refNumber: searchParams.get('refNumber') || undefined,
+    days: searchParams.get('days') ? Number(searchParams.get('days')) : undefined,
+    buckets,
+    limit,
+    offset,
+  }
+}
+
 const json = (data, status = 200) => NextResponse.json(data, { status })
 const err = (message, status = 400) => NextResponse.json({ error: message }, { status })
 
@@ -1058,6 +1141,78 @@ async function route(request, ctx) {
           }
         }
       }
+    }
+
+    // ==================== REPORTS ====================
+    // GET /api/reports — executive dashboard
+    if (seg === 'reports' && !path[1] && method === 'GET') {
+      if (!canViewReports(user.role)) return err('Insufficient permissions', 403)
+      try {
+        const filters = extractFilters(searchParams)
+        const data = await getDashboardReport({ warehouseId: filters.warehouseId })
+        return reportResponse('dashboard', { data }, filters)
+      } catch (e) { return err(e.message, 400) }
+    }
+
+    // GET /api/reports/inventory/:type
+    if (seg === 'reports' && path[1] === 'inventory' && path[2] && method === 'GET') {
+      if (!canViewReports(user.role)) return err('Insufficient permissions', 403)
+      const validTypes = Object.values(InventoryReportType)
+      const reportType = path[2]
+      if (!validTypes.includes(reportType)) return err('Invalid inventory report type', 400)
+      try {
+        const filters = extractFilters(searchParams)
+        const result = await getInventoryReport(reportType, filters)
+        return reportResponse(`inventory:${reportType}`, result, filters)
+      } catch (e) { return err(e.message, 400) }
+    }
+
+    // GET /api/reports/warehouse/:type
+    if (seg === 'reports' && path[1] === 'warehouse' && path[2] && method === 'GET') {
+      if (!canViewReports(user.role)) return err('Insufficient permissions', 403)
+      const validTypes = Object.values(OperationsReportType)
+      const reportType = path[2]
+      if (!validTypes.includes(reportType)) return err('Invalid warehouse report type', 400)
+      try {
+        const filters = extractFilters(searchParams)
+        const result = await getOperationsReport(reportType, filters)
+        return reportResponse(`warehouse:${reportType}`, result, filters)
+      } catch (e) { return err(e.message, 400) }
+    }
+
+    // GET /api/reports/outbound/:type
+    if (seg === 'reports' && path[1] === 'outbound' && path[2] && method === 'GET') {
+      if (!canViewReports(user.role)) return err('Insufficient permissions', 403)
+      const validTypes = ['picking', 'packing', 'shipping']
+      const reportType = path[2]
+      if (!validTypes.includes(reportType)) return err('Invalid outbound report type', 400)
+      try {
+        const filters = extractFilters(searchParams)
+        const result = await getOperationsReport(reportType, filters)
+        return reportResponse(`outbound:${reportType}`, result, filters)
+      } catch (e) { return err(e.message, 400) }
+    }
+
+    // GET /api/reports/audit/:type
+    if (seg === 'reports' && path[1] === 'audit' && path[2] && method === 'GET') {
+      if (!canViewReports(user.role)) return err('Insufficient permissions', 403)
+      const validTypes = Object.values(AuditReportType)
+      const reportType = path[2]
+      if (!validTypes.includes(reportType)) return err('Invalid audit report type', 400)
+      try {
+        const filters = extractFilters(searchParams)
+        const result = await getAuditReport(reportType, filters)
+        return reportResponse(`audit:${reportType}`, result, filters)
+      } catch (e) { return err(e.message, 400) }
+    }
+
+    // GET /api/reports/audit-options — filter dropdown options for audit reports
+    if (seg === 'reports' && path[1] === 'audit-options' && method === 'GET') {
+      if (!canViewReports(user.role)) return err('Insufficient permissions', 403)
+      try {
+        const options = await getAuditFilterOptions()
+        return json({ success: true, data: options })
+      } catch (e) { return err(e.message, 400) }
     }
 
     return err('Not found', 404)

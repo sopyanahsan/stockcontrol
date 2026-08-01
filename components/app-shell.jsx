@@ -41,8 +41,8 @@ const NAV_SECTIONS = [
       { href: '/picking', label: 'Picking', icon: ClipboardList },
       { href: '/packing', label: 'Packing', icon: Package },
       { href: '/shipping', label: 'Shipping', icon: Ship },
-      { href: '/movements', label: 'Stock Movement', icon: ArrowRightLeft },
-      { href: '/adjustments', label: 'Stock Adjustment', icon: SlidersHorizontal },
+      { href: '/movement', label: 'Stock Movement', icon: ArrowRightLeft },
+      { href: '/adjustment', label: 'Stock Adjustment', icon: SlidersHorizontal },
     ],
   },
   {
@@ -56,7 +56,7 @@ const NAV_SECTIONS = [
     label: 'System',
     items: [
       { href: '/audit-trail', label: 'Audit Trail', icon: FileSearch },
-      { href: '/reports', label: 'Reports', icon: BarChart3, soon: true },
+      { href: '/reports', label: 'Reports', icon: BarChart3 },
     ],
   },
 ]
