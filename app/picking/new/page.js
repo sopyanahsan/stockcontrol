@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -11,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/ErrorState'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -44,10 +47,35 @@ const App = () => {
   const [itemSearch, setItemSearch] = useState('')
   const [suggestErrors, setSuggestErrors] = useState({})
 
-  const { data: meta, isLoading: metaLoading } = useQuery({
+  const { data: meta, isLoading: metaLoading, error: metaError, refetch: refetchMeta } = useQuery({
     queryKey: ['meta'],
     queryFn: () => api('/meta'),
   })
+
+  if (metaLoading) {
+    return (
+      <AppShell title="New Picking Order" subtitle="Loading...">
+        <div className="mx-auto max-w-3xl space-y-6">
+          <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm space-y-4">
+            <Skeleton className="h-4 w-32" />
+            <div className="grid grid-cols-2 gap-4">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          </div>
+          <Skeleton className="h-64 w-full rounded-md" />
+        </div>
+      </AppShell>
+    )
+  }
+
+  if (metaError) {
+    return (
+      <AppShell title="New Picking Order" subtitle="Error">
+        <ErrorState error={metaError} onRetry={() => refetchMeta()} title="Failed to load metadata" />
+      </AppShell>
+    )
+  }
 
   const createMut = useMutation({
     mutationFn: () => api('/picking', {

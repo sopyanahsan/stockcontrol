@@ -1,6 +1,8 @@
 'use client'
 
-import { useMemo, useState, use } from 'react'
+export const dynamic = 'force-dynamic'
+
+import { useMemo, useState, use, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -15,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '@/components/ui/select'
+import { ErrorState } from '@/components/ErrorState'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
@@ -61,9 +64,17 @@ const App = ({ params }) => {
   const router = useRouter()
   const qc = useQueryClient()
 
-  const { data, isLoading } = useQuery({
+  const [error, setError] = useState(null)
+  const lineItemRefs = useRef([])
+  const lineExpectedQtyRefs = useRef([])
+  const lineUnitCostRefs = useRef([])
+  const lineBatchRefs = useRef([])
+  const saveDraftButtonRef = useRef(null)
+
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['receiving', id],
     queryFn: () => api(`/receiving/${id}`),
+    onError: (e) => setError(e),
   })
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: () => api('/meta') })
   const { data: items } = useQuery({ queryKey: ['items'], queryFn: () => api('/items') })
@@ -98,6 +109,26 @@ const App = ({ params }) => {
   const addLine = () => setEditLines((lines) => [...lines, { itemId: '', expectedQty: 1, receivedQty: 0, unitCost: 0, batchNo: '', itemLabel: '', serialTracked: false }])
   const removeLine = (i) => setEditLines((lines) => lines.filter((_, idx) => idx !== i))
   const updateLine = (i, patch) => setEditLines((lines) => lines.map((l, idx) => idx === i ? { ...l, ...patch } : l))
+
+  // Enter-key navigation for draft lines table
+  const handleDraftLineKeyDown = (e, rowIdx, field) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    const totalLines = linesForEdit.length
+    if (field === 'itemId') {
+      lineExpectedQtyRefs.current[rowIdx]?.focus()
+    } else if (field === 'expectedQty') {
+      lineUnitCostRefs.current[rowIdx]?.focus()
+    } else if (field === 'unitCost') {
+      lineBatchRefs.current[rowIdx]?.focus()
+    } else if (field === 'batchNo') {
+      if (rowIdx < totalLines - 1) {
+        lineItemRefs.current[rowIdx + 1]?.focus()
+      } else if (draftLines && !saveMut.isPending) {
+        saveDraftButtonRef.current?.focus()
+      }
+    }
+  }
 
   const saveMut = useMutation({
     mutationFn: () => api(`/receiving/${id}`, {
@@ -166,10 +197,14 @@ const App = ({ params }) => {
       </AppShell>
     )
   }
-  if (!data) {
+  if (error || !data) {
     return (
-      <AppShell title="Receiving" subtitle="Not found">
-        <div className="rounded-md border p-8 text-center text-sm text-gray-500">Document not found. <Link className="text-blue-600 underline" href="/receiving">Back to list</Link></div>
+      <AppShell title="Receiving" subtitle="Error">
+        <ErrorState
+          error={error}
+          onRetry={() => { setError(null); refetch() }}
+          title="Failed to load receiving document"
+        />
       </AppShell>
     )
   }
@@ -260,7 +295,7 @@ const App = ({ params }) => {
                   <Plus className="mr-1 h-3.5 w-3.5" /> Add Line
                 </Button>
                 {draftLines && (
-                  <Button size="sm" className="h-7 bg-blue-600 text-xs hover:bg-blue-700" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+                  <Button ref={saveDraftButtonRef} size="sm" className="h-7 bg-blue-600 text-xs hover:bg-blue-700" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
                     {saveMut.isPending && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
                     Save Draft
                   </Button>
@@ -291,7 +326,13 @@ const App = ({ params }) => {
                             const it = (items || []).find((x) => x.id === v)
                             updateLine(i, { itemId: v, itemLabel: it ? `${it.sku} - ${it.name}` : '', serialTracked: !!it?.serialTracked, unitCost: it?.unitCost || l.unitCost })
                           }}>
-                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select item..." /></SelectTrigger>
+                            <SelectTrigger
+                              ref={(el) => { lineItemRefs.current[i] = el ? el.querySelector('[role="combobox"]') : null }}
+                              className="h-8 text-xs"
+                              onKeyDown={(e) => handleDraftLineKeyDown(e, i, 'itemId')}
+                            >
+                              <SelectValue placeholder="Select item..." />
+                            </SelectTrigger>
                             <SelectContent>
                               {(items || []).filter((x) => x.isActive).map((x) => (
                                 <SelectItem key={x.id} value={x.id}>{x.sku} - {x.name}{x.serialTracked ? ' (SN)' : ''}</SelectItem>
@@ -299,10 +340,35 @@ const App = ({ params }) => {
                             </SelectContent>
                           </Select>
                         </td>
-                        <td className="px-4 py-2 text-right"><Input type="number" min="0" step="1" value={l.expectedQty} onChange={(e) => updateLine(i, { expectedQty: e.target.value })} className="h-8 w-24 text-right text-xs" /></td>
+                        <td className="px-4 py-2 text-right">
+                          <Input
+                            type="number" min="0" step="1" value={l.expectedQty}
+                            onChange={(e) => updateLine(i, { expectedQty: e.target.value })}
+                            onKeyDown={(e) => handleDraftLineKeyDown(e, i, 'expectedQty')}
+                            ref={(el) => { lineExpectedQtyRefs.current[i] = el }}
+                            className="h-8 w-24 text-right text-xs"
+                          />
+                        </td>
                         <td className="px-4 py-2 text-right text-gray-400">-</td>
-                        <td className="px-4 py-2 text-right"><Input type="number" min="0" step="0.01" value={l.unitCost} onChange={(e) => updateLine(i, { unitCost: e.target.value })} className="h-8 w-24 text-right text-xs" /></td>
-                        <td className="px-4 py-2"><Input value={l.batchNo} onChange={(e) => updateLine(i, { batchNo: e.target.value })} className="h-8 w-24 text-xs" placeholder="optional" /></td>
+                        <td className="px-4 py-2 text-right">
+                          <Input
+                            type="number" min="0" step="0.01" value={l.unitCost}
+                            onChange={(e) => updateLine(i, { unitCost: e.target.value })}
+                            onKeyDown={(e) => handleDraftLineKeyDown(e, i, 'unitCost')}
+                            ref={(el) => { lineUnitCostRefs.current[i] = el }}
+                            className="h-8 w-24 text-right text-xs"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <Input
+                            value={l.batchNo}
+                            onChange={(e) => updateLine(i, { batchNo: e.target.value })}
+                            onKeyDown={(e) => handleDraftLineKeyDown(e, i, 'batchNo')}
+                            ref={(el) => { lineBatchRefs.current[i] = el }}
+                            className="h-8 w-24 text-xs"
+                            placeholder="optional"
+                          />
+                        </td>
                         <td className="px-4 py-2 text-xs text-gray-400">{l.serialTracked ? 'Required on post' : '-'}</td>
                         <td className="px-4 py-2 text-right">
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={() => removeLine(i)}><Trash2 className="h-3.5 w-3.5" /></Button>

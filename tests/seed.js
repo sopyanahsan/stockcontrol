@@ -98,6 +98,20 @@ async function seed(tx, seedKey, users) {
     },
   })
 
+  // STAGING location — receiving always posts into STAGING, so the warehouse
+  // must have one active STAGING bin or createReceivingDraft throws.
+  const locStaging = await tx.location.upsert({
+    where: { id: `loc_staging_${seedKey}` },
+    update: { isActive: true },
+    create: {
+      id: `loc_staging_${seedKey}`,
+      zoneId: zone.id,
+      code: `LST${seedKey}`.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10),
+      type: 'STAGING',
+      isActive: true,
+    },
+  })
+
   // 4. Reason codes (type ADJUSTMENT)
   const reasonAdj = await tx.reasonCode.upsert({
     where: { id: `rc_adj_${seedKey}` },
@@ -119,6 +133,18 @@ async function seed(tx, seedKey, users) {
       code: `CC-${seedKey}`.toUpperCase().slice(0, 10),
       description: 'Test Cycle Count Reason',
       type: 'CYCLE_COUNT',
+    },
+  })
+
+  // Reason code type OPNAME (needed for approveStockOpname)
+  const reasonOpname = await tx.reasonCode.upsert({
+    where: { id: `rc_opname_${seedKey}` },
+    update: {},
+    create: {
+      id: `rc_opname_${seedKey}`,
+      code: `OP-${seedKey}`.toUpperCase().slice(0, 10),
+      description: 'Test Stock Opname Reason',
+      type: 'OPNAME',
     },
   })
 
@@ -147,8 +173,10 @@ async function seed(tx, seedKey, users) {
     itemB,
     loc1,
     loc2,
+    locStaging,
     reasonAdj,
     reasonCC,
+    reasonOpname,
     warehouse,
     zone,
     category,

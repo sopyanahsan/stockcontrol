@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+export const dynamic = 'force-dynamic'
+
+import { use, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
@@ -146,7 +148,8 @@ function PreviewDialog({ shipmentId, onClose }) {
 }
 
 export default function ShippingDetailPage({ params }) {
-  const shipmentId = params.id
+  const { id } = use(params)
+  const shipmentId = id
   const qc = useQueryClient()
 
   const [showPreview, setShowPreview] = useState(false)

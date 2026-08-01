@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -8,6 +10,7 @@ import AppShell from '@/components/app-shell'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/ErrorState'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -130,13 +133,13 @@ const App = () => {
   const qc = useQueryClient()
   const [tab, setTab] = useState('QUEUE')
 
-  const { data: queueData, isLoading: queueLoading } = useQuery({
+  const { data: queueData, isLoading: queueLoading, error: queueError, refetch: refetchQueue } = useQuery({
     queryKey: ['packing-queue'],
     queryFn: () => api('/packing/queue'),
     enabled: tab === 'QUEUE',
   })
 
-  const { data: ordersData, isLoading: ordersLoading } = useQuery({
+  const { data: ordersData, isLoading: ordersLoading, error: ordersError, refetch: refetchOrders } = useQuery({
     queryKey: ['packing-orders', tab],
     queryFn: () => api(`/packing?status=${tab}`),
     enabled: tab !== 'QUEUE',
@@ -160,6 +163,8 @@ const App = () => {
   }
 
   const isLoading = tab === 'QUEUE' ? queueLoading : ordersLoading
+  const error = tab === 'QUEUE' ? queueError : ordersError
+  const refetch = tab === 'QUEUE' ? refetchQueue : refetchOrders
 
   return (
     <AppShell
@@ -189,6 +194,8 @@ const App = () => {
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-md" />)}
           </div>
+        ) : error ? (
+          <ErrorState error={error} onRetry={() => refetch()} title="Failed to load packing data" />
         ) : tab === 'QUEUE' ? (
           queue.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-4 py-16 text-center shadow-sm">

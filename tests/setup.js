@@ -53,6 +53,12 @@ afterEach(async () => {
     // 1. PickingTaskSerial (by serialNo pattern)
     await tx.$executeRaw`DELETE FROM "PickingTaskSerial" WHERE "serialNo" LIKE ${'%' + SEED_KEY + '%'}`
 
+    // 1b. StockOpname lines then StockOpname. Opname numbers do NOT embed the
+    //     seed key (SO-WH01-YYYYMM-000001), so match by creator instead. Must
+    //     run BEFORE Item deletion or the StockOpnameLine RESTRICT FK fires.
+    await tx.$executeRaw`DELETE FROM "StockOpnameLine" WHERE "stockOpnameId" IN (SELECT id FROM "StockOpname" WHERE "createdById" IN (SELECT id FROM "User" WHERE "email" LIKE ${'%' + SEED_KEY + '%'}))`
+    await tx.$executeRaw`DELETE FROM "StockOpname" WHERE "createdById" IN (SELECT id FROM "User" WHERE "email" LIKE ${'%' + SEED_KEY + '%'})`
+
     // 2. All child tables that reference Item (via RESTRICT FKs in the actual DB schema).
     //    Delete all children of seed Items before deleting Items.
     const seedItems = await tx.$queryRaw`SELECT id FROM "Item" WHERE "uomId" IN (SELECT id FROM "Uom" WHERE "code" LIKE ${'%' + SEED_KEY + '%'})`
@@ -79,6 +85,13 @@ afterEach(async () => {
 
     // 5. Packing records
     await tx.$executeRaw`DELETE FROM "PackingOrder" WHERE "packingNumber" LIKE ${'%' + SEED_KEY + '%'}`
+
+    // 5a. StockTransfer lines then StockTransfer (lines carry Location RESTRICT FKs)
+    await tx.$executeRaw`DELETE FROM "StockTransferLine" WHERE "transferId" IN (SELECT id FROM "StockTransfer" WHERE "transferNumber" LIKE ${'%' + SEED_KEY + '%'})`
+    await tx.$executeRaw`DELETE FROM "StockTransfer" WHERE "transferNumber" LIKE ${'%' + SEED_KEY + '%'}`
+
+    // 5c. Receiving after ReceivingLine (Receiving carries Location + Warehouse RESTRICT FKs)
+    await tx.$executeRaw`DELETE FROM "Receiving" WHERE "warehouseId" IN (SELECT id FROM "Warehouse" WHERE "code" = ${WH_CODE})`
 
     // 6. Infrastructure (Location → Zone → Warehouse)
     await tx.$executeRaw`DELETE FROM "Location" WHERE "zoneId" IN (SELECT id FROM "Zone" WHERE "warehouseId" IN (SELECT id FROM "Warehouse" WHERE "code" = ${WH_CODE}))`

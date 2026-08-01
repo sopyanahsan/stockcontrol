@@ -16,7 +16,7 @@
  * Run:  npx jest tests/reports-acceptance.test.js
  */
 
-const { describe, test, expect, beforeEach, jest } = require('@jest/globals')
+const { describe, test, expect, beforeEach } = require('@jest/globals')
 const { prisma } = require('../lib/prisma')
 const { seed } = require('./seed')
 
@@ -400,10 +400,12 @@ describe('Operations Reports', () => {
       },
     })
 
+    await receivingService.startReceiving({ user: s.admin, id: receiving.id })
+
     await receivingService.postReceiving({
       user: s.admin,
       id: receiving.id,
-      body: { receivedLines: [{ lineId: receiving.lines[0].id, receivedQty: 50 }] },
+      body: { lines: [{ lineId: receiving.lines[0].id, receivedQty: 50 }] },
     })
 
     const result = await getOperationsReport('receiving', { status: 'COMPLETED' })
@@ -419,24 +421,31 @@ describe('Operations Reports', () => {
   // TEST 2.3: Putaway Report
   // -----------------------------------------------------------------------
   test('Putaway: returns putaway task records', async () => {
-    // Seed stock first
+    // Putaway tasks are created automatically when a receiving is posted.
+    // Seed stock and post a receiving so a putaway task exists.
     await createFifoLayer(prisma, s.itemA.id, s.loc1.id, 100, 10.0, `PUT-SEED-${global.seedKey}`)
 
-    // Create putaway task
-    const putaway = await putawayService.createPutawayTask({
+    const receiving = await receivingService.createReceivingDraft({
       user: s.admin,
       body: {
-        itemId: s.itemA.id,
-        qty: 50,
-        fromLocationId: s.loc2.id,
-        toLocationId: s.loc1.id,
+        supplier: 'Test Supplier',
+        warehouseId: s.warehouse.id,
+        lines: [{ itemId: s.itemA.id, expectedQty: 50, unitCost: 10.0 }],
       },
+    })
+
+    await receivingService.startReceiving({ user: s.admin, id: receiving.id })
+
+    await receivingService.postReceiving({
+      user: s.admin,
+      id: receiving.id,
+      body: { lines: [{ lineId: receiving.lines[0].id, receivedQty: 50 }] },
     })
 
     const result = await getOperationsReport('putaway', {})
 
     expect(result.data).toBeDefined()
-    // Result may be empty if putaway is from staging, but structure should be valid
+    expect(result.total).toBeGreaterThan(0)
   })
 
   // -----------------------------------------------------------------------

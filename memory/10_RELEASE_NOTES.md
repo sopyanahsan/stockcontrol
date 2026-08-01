@@ -10,11 +10,218 @@ This project follows Semantic Versioning.
 
 Current Version:
 
-v0.7.0
+v0.9.7
 
 Status:
 
-Stable Development
+Release Candidate — preparing v1.0.0
+
+---
+
+# v0.9.7
+
+Release Name
+
+Production Readiness Review (Phase 9.5D)
+
+Status
+
+Release Candidate
+
+## Features
+
+- Build review — removed invalid `dynamicRoutes` next.config key (build warning gone)
+- Removed legacy `pages/` router (Pages Router `_app`/`_error`)
+- Removed dead code: `app/providers.js`, `lib/constants/testIds`, root scratch scripts
+- Dependency audit — removed 9 unused packages; declared missing `xlsx`
+- Upgraded `next` to 15.5.22 (security patch)
+- Added npm overrides: `postcss` 8.5.25, `sharp` 0.35.3 (security patches)
+- Added `.env.example` with documented environment variables
+- Fixed reports test suite parse error
+- Synchronized README + memory documentation to v0.9.7
+
+---
+
+# v0.9.6
+
+Release Name
+
+Data Integrity & Transaction Audit (Phase 9.5C)
+
+Status
+
+Stable
+
+## Features
+
+- Audit of all inventory services (Receiving → Shipping → Stock Opname)
+- Fixed putaway FIFO consumption: staging layers now consumed and destination layers inherit unit cost + FIFO age
+- FIFO layer identity preserved across putaway (receivedAt, refNumber, unitCost)
+
+---
+
+# v0.9.5
+
+Release Name
+
+API Hardening (Phase 9.5B)
+
+Status
+
+Stable
+
+## Features
+
+- Strict JSON body parsing (malformed bodies → 400)
+- Bounded pagination values
+- Sanitized 500/Prisma error messages
+- Consolidated operational RBAC checks
+- Added PATCH route for stock-opname counts
+
+---
+
+# v0.9.4
+
+Release Name
+
+Stock Opname (Phase 4 — UI)
+
+Status
+
+Stable
+
+## Features
+
+Phase 9.1 — Foundation & Database
+
+- StockOpname schema extensions
+- StockOpnameLine schema extensions
+- SO numbering support (SO-YYYYMM-NNNNNN)
+- User relations for createdBy/approvedBy
+
+Phase 9.2 — Service Layer
+
+- lib/stock-opname-service.js
+- All business logic centralized
+
+Phase 9.3 — API Endpoints
+
+- 11 REST endpoints in app/api/[[...path]]/route.js
+- RBAC: ADMINISTRATOR, SUPERVISOR, STOCK_CONTROL
+
+Phase 9.4 — User Interface
+
+- 3 pages: list, new, detail
+- 7 reusable components under components/stock-opname/
+- Barcode scan workflow with location + item scan cards
+- Inline count table with auto-focus and Enter-key navigation
+- Variance summary card with color-coded indicators
+- Status flow indicator in header
+- Confirm dialogs for approve/reject/cancel
+
+## UI Components
+
+| Component | Description |
+|-----------|-------------|
+| StockOpnameStatusBadge | Status-colored badge |
+| StockOpnameHeader | Detail page header with flow indicator |
+| VarianceSummaryCard | KPI card grid with accuracy % |
+| ScanLocationCard | Barcode scan input for locations |
+| ScanItemCard | Barcode scan input for items |
+| ConfirmDialog | Reusable confirmation dialog |
+| EmptyState | Empty/dashed placeholder |
+
+## Pages
+
+| Page | Description |
+|------|-------------|
+| /stock-opname | List with search, status tabs, create dialog |
+| /stock-opname/new | Minimal form — remarks + create |
+| /stock-opname/[id] | Full workflow: scan → count → submit → approve |
+
+## Color Coding
+
+| State | Color |
+|-------|-------|
+| Matched | Green |
+| Over | Blue |
+| Missing | Red |
+| Variance | Orange |
+
+## Status Badges
+
+| Status | Badge Color |
+|---------|------------|
+| Draft | Gray |
+| In Progress | Blue |
+| Submitted | Orange |
+| Approved | Purple |
+| Completed | Green |
+| Cancelled | Red |
+
+---
+
+# v0.9.3
+
+Release Name
+
+Stock Opname (Phase 3 — API)
+
+Status
+
+Stable
+
+## Features
+
+Phase 9.1 — Foundation & Database
+
+- StockOpname schema extensions
+- StockOpnameLine schema extensions
+- SO numbering support (SO-YYYYMM-NNNNNN)
+- User relations for createdBy/approvedBy
+- Item/Location reverse relations
+
+Phase 9.2 — Service Layer
+
+- lib/stock-opname-service.js
+- All business logic centralized in service layer
+
+Phase 9.3 — API Endpoints
+
+- 11 REST endpoints registered in app/api/[[...path]]/route.js
+- RBAC: ADMINISTRATOR, SUPERVISOR, STOCK_CONTROL
+
+## API Endpoints
+
+| Method | Endpoint | Service Function |
+|--------|----------|-----------------|
+| GET | /api/stock-opname | listStockOpnames() |
+| POST | /api/stock-opname | createStockOpname() |
+| GET | /api/stock-opname/:id | getStockOpname() |
+| POST | /api/stock-opname/:id/start | startStockOpname() |
+| POST | /api/stock-opname/:id/scan-location | scanLocation() |
+| POST | /api/stock-opname/:id/scan-item | scanItem() |
+| PATCH | /api/stock-opname/:id/count | updateCountedQty() |
+| POST | /api/stock-opname/:id/submit | submitStockOpname() |
+| POST | /api/stock-opname/:id/reject | rejectStockOpname() |
+| POST | /api/stock-opname/:id/approve | approveStockOpname() |
+| POST | /api/stock-opname/:id/cancel | cancelStockOpname() |
+| GET | /api/stock-opname/:id/summary | getVarianceSummary() |
+
+## Business Rules
+
+- Stock Opname NEVER modifies inventory directly
+- After APPROVED: Calls adjustment-service.js to create adjustment
+- Adjustment generates: Stock Ledger + FIFO + Audit Trail
+- systemQty captured at DRAFT → IN_PROGRESS transition
+- systemQty becomes immutable after capture
+
+## Status Flow
+
+DRAFT → IN_PROGRESS → SUBMITTED → APPROVED → COMPLETED
+
+CANCELLED is terminal.
+REJECTED returns to IN_PROGRESS.
 
 ---
 
@@ -433,56 +640,6 @@ Advanced Warehouse
 
 # Upcoming Releases
 
-## v0.7.0
-
-Shipping Module
-
-Planned Features
-
-- Shipping Order
-- Shipment Validation
-- Consume FIFO
-- Stock Ledger OUT
-- Inventory Reduction
-- Shipment Audit Trail
-- Shipping Dashboard KPI
-
----
-
-## v0.8.0
-
-Reporting & Analytics
-
-Planned Features
-
-- Inventory Reports
-- Stock Card Report
-- Adjustment Report
-- Movement Report
-- Picking Report
-- Packing Report
-- KPI Dashboard
-- Export Excel
-- Export PDF
-
----
-
-## v0.9.0
-
-Advanced Warehouse
-
-Planned Features
-
-- Multi Warehouse
-- Warehouse Zone
-- Bin Replenishment
-- Cross Docking
-- Wave Picking
-- Batch Picking
-- ASN (Advanced Shipping Notice)
-
----
-
 ## v1.0.0
 
 Enterprise WMS Stable Release
@@ -493,7 +650,7 @@ Target Scope
 - Complete Inventory Control
 - Complete Outbound Workflow
 - Reporting & Analytics
-- Multi Warehouse
+- Stock Opname
 - Stable API
 - Production Ready
 - Documentation Complete
@@ -523,7 +680,7 @@ Last Updated
 
 Version:
 
-v0.7.0
+v0.9.7
 
 Date:
 
@@ -531,4 +688,4 @@ Date:
 
 Status:
 
-Stable Development
+Release Candidate

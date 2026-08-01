@@ -1,13 +1,5 @@
 const nextConfig = {
-  output: 'standalone',
-  images: {
-    unoptimized: true,
-    remotePatterns: [
-      { protocol: 'https', hostname: 'avatars.githubusercontent.com', pathname: '/**' },
-    ],
-  },
-  // Renamed from experimental.serverComponentsExternalPackages in Next 15
-  serverExternalPackages: ['mongodb'],
+  outputFileTracingRoot: __dirname,
   webpack(config, { dev }) {
     if (dev) {
       // Reduce CPU/memory from file watching

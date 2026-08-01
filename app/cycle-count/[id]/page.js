@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+export const dynamic = 'force-dynamic'
+
+import { use, useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -65,7 +67,7 @@ function StatusFlow({ status }) {
 }
 
 const App = ({ params }) => {
-  const { id } = params
+  const { id } = use(params)
   const router = useRouter()
   const qc = useQueryClient()
 
@@ -77,13 +79,40 @@ const App = ({ params }) => {
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: () => api('/meta') })
 
   const [countedLines, setCountedLines] = useState(null) // { [lineId]: countedQty }
+  const [highlightedLineId, setHighlightedLineId] = useState(null)
   const [assignToId, setAssignToId] = useState('')
   const [approveDialogOpen, setApproveDialogOpen] = useState(false)
   const [approveLoading, setApproveLoading] = useState(false)
 
+  // Refs for auto-focus and Enter-key navigation
+  const lineInputRefs = useRef({})
+
   const flatLocations = meta?.warehouses?.flatMap((wh) =>
     wh.zones?.flatMap((z) => z.locations || []) || []
   ) || []
+
+  // Auto-scroll to highlighted row
+  useEffect(() => {
+    if (highlightedLineId && lineInputRefs.current[highlightedLineId]) {
+      lineInputRefs.current[highlightedLineId].scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [highlightedLineId])
+
+  // Keyboard handler: Enter moves to next row
+  const handleCountKeyDown = (e, lineIds, currentIndex) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      const nextIndex = currentIndex + 1
+      if (nextIndex < lineIds.length) {
+        const nextId = lineIds[nextIndex]
+        setHighlightedLineId(nextId)
+        setTimeout(() => {
+          lineInputRefs.current[nextId]?.focus()
+          lineInputRefs.current[nextId]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 50)
+      }
+    }
+  }
 
   // Mutations
   const assignMut = useMutation({
@@ -327,9 +356,15 @@ const App = ({ params }) => {
                 const diffQty = Number(countedQty || 0) - Number(line.systemQty || 0)
                 const hasVariance = diffQty !== 0
                 const showCountedInput = isInProgress
+                const isHighlighted = highlightedLineId === line.id
+                const lineIds = data.lines.map((l) => l.id)
 
                 return (
-                  <tr key={line.id} className={`border-t border-gray-100 ${hasVariance ? 'bg-amber-50' : ''}`}>
+                  <tr
+                    key={line.id}
+                    ref={(el) => { lineInputRefs.current[line.id] = el ? el.querySelector('input') || el : null }}
+                    className={`border-t border-gray-100 ${isHighlighted ? 'bg-amber-50 ring-1 ring-amber-300' : hasVariance ? 'bg-amber-50' : ''}`}
+                  >
                     <td className="px-4 py-2 text-xs text-gray-400">{i + 1}</td>
                     <td className="px-4 py-2">
                       <div className="font-mono text-xs">{line.item?.sku}</div>
@@ -344,12 +379,15 @@ const App = ({ params }) => {
                     <td className="px-4 py-2 text-right">
                       {showCountedInput ? (
                         <Input
+                          ref={(el) => { lineInputRefs.current[line.id] = el }}
                           type="number"
                           min="0"
                           value={countedLines?.[line.id] ?? ''}
                           onChange={(e) => updateCountedLine(line.id, e.target.value)}
+                          onKeyDown={(e) => handleCountKeyDown(e, lineIds, i)}
+                          onFocus={() => setHighlightedLineId(line.id)}
                           placeholder="0"
-                          className="h-7 w-24 text-xs tabular-nums text-right"
+                          className={`h-7 w-24 text-xs tabular-nums text-right ${isHighlighted ? 'border-amber-400 bg-white' : ''}`}
                         />
                       ) : (
                         <span className="tabular-nums text-xs font-medium">
@@ -386,6 +424,11 @@ const App = ({ params }) => {
               </tfoot>
             )}
           </table>
+          {isInProgress && (
+            <div className="border-t border-gray-100 bg-gray-50 px-4 py-2 text-[11px] text-gray-400">
+              Press <kbd className="rounded border border-gray-200 bg-white px-1 font-mono">Enter</kbd> to move to the next row
+            </div>
+          )}
         </div>
 
         {/* Variance detail (submitted/approved) */}

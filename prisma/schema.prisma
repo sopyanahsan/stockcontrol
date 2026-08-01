@@ -30,6 +30,8 @@ model User {
   shipmentsCreated                   Shipment[]    @relation("ShipmentCreatedBy")
   shipmentsAssigned                  Shipment[]    @relation("ShipmentAssignedTo")
   shipmentPackagesVerified            ShipmentPackage[] @relation("ShipmentPackageVerifiedBy")
+  stockOpnamesCreated                StockOpname[] @relation("StockOpnameCreator")
+  approvedStockOpnames              StockOpname[] @relation("StockOpnameApprover")
 }
 
 model Category {
@@ -74,6 +76,7 @@ model Item {
   cycleCountLines    CycleCountLine[]
   pickingOrderLines  PickingOrderLine[]
   packageItems       PackageItem[]
+  stockOpnameLines   StockOpnameLine[]
 
   @@index([sku])
   @@index([name])
@@ -118,6 +121,7 @@ model Location {
   stockAdjustmentLines StockAdjustmentLine[]
   cycleCountLines    CycleCountLine[]
   pickingTasks       PickingTask[]
+  stockOpnameLines   StockOpnameLine[]
 }
 
 model ReasonCode {
@@ -305,6 +309,9 @@ model StockTransfer {
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   lines          StockTransferLine[]
+
+  @@index([status])
+  @@index([createdAt])
 }
 
 model StockTransferLine {
@@ -315,6 +322,11 @@ model StockTransferLine {
   toLocationId   String
   qty            Float
   transfer       StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  @@index([transferId])
+  @@index([itemId])
+  @@index([fromLocationId])
+  @@index([toLocationId])
 }
 
 model StockAdjustment {
@@ -333,6 +345,9 @@ model StockAdjustment {
   createdBy        User                  @relation("AdjustmentCreator", fields: [createdById], references: [id])
   approvedBy       User?                 @relation("AdjustmentApprover", fields: [approvedById], references: [id])
   reasonCode       ReasonCode?           @relation(fields: [reasonCodeId], references: [id])
+
+  @@index([status])
+  @@index([createdAt])
 }
 
 model StockAdjustmentLine {
@@ -350,6 +365,10 @@ model StockAdjustmentLine {
   item          Item            @relation(fields: [itemId], references: [id])
   location      Location        @relation(fields: [locationId], references: [id])
   reasonCode    ReasonCode?     @relation(fields: [reasonCodeId], references: [id])
+
+  @@index([adjustmentId])
+  @@index([itemId])
+  @@index([locationId])
 }
 
 model CycleCount {
@@ -369,6 +388,10 @@ model CycleCount {
   createdBy    User             @relation("CycleCountCreator", fields: [createdById], references: [id])
   assignedTo   User?           @relation("CycleCountAssignedTo", fields: [assignedToId], references: [id])
   approvedBy   User?           @relation("CycleCountApprover", fields: [approvedById], references: [id])
+
+  @@index([status])
+  @@index([locationId])
+  @@index([createdAt])
 }
 
 model PickingOrder {
@@ -538,19 +561,33 @@ model CycleCountLine {
   cycleCount   CycleCount @relation(fields: [cycleCountId], references: [id], onDelete: Cascade)
   item         Item       @relation(fields: [itemId], references: [id])
   location     Location   @relation(fields: [locationId], references: [id])
+
+  @@index([cycleCountId])
+  @@index([itemId])
+  @@index([locationId])
 }
 
 model StockOpname {
   id           String            @id @default(uuid())
   opnameNumber String            @unique
   status       DocStatus         @default(DRAFT)
+  opnameDate   DateTime          @default(now())
   remarks      String?
   createdById  String
   approvedById String?
+  approvedAt   DateTime?
   postedAt     DateTime?
+  startedAt    DateTime?
+  completedAt  DateTime?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   lines        StockOpnameLine[]
+  createdBy    User              @relation("StockOpnameCreator", fields: [createdById], references: [id])
+  approvedBy   User?             @relation("StockOpnameApprover", fields: [approvedById], references: [id])
+
+  @@index([status])
+  @@index([createdById])
+  @@index([createdAt])
 }
 
 model StockOpnameLine {
@@ -561,7 +598,15 @@ model StockOpnameLine {
   systemQty     Float       @default(0)
   countedQty    Float       @default(0)
   diffQty       Float       @default(0)
+  varianceReason String?
+  countedAt     DateTime?
   stockOpname   StockOpname @relation(fields: [stockOpnameId], references: [id], onDelete: Cascade)
+  item          Item        @relation(fields: [itemId], references: [id])
+  location      Location    @relation(fields: [locationId], references: [id])
+
+  @@index([stockOpnameId])
+  @@index([itemId])
+  @@index([locationId])
 }
 
 model Shipment {

@@ -1,6 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+export const dynamic = 'force-dynamic'
+
+import { use, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -62,7 +64,7 @@ function StatusFlow({ status }) {
 }
 
 const App = ({ params }) => {
-  const { id } = params
+  const { id } = use(params)
   const router = useRouter()
   const qc = useQueryClient()
 

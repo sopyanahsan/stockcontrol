@@ -100,6 +100,22 @@ import {
 } from '@/lib/shipping-service'
 import { lookupByBarcode } from '@/lib/barcode-service'
 
+// ---------- Stock Opname Service ----------
+import {
+  listStockOpnames,
+  getStockOpname,
+  createStockOpname,
+  startStockOpname,
+  scanLocation,
+  scanItem,
+  updateCountedQty,
+  submitStockOpname,
+  rejectStockOpname,
+  approveStockOpname,
+  cancelStockOpname,
+  getVarianceSummary,
+} from '@/lib/stock-opname-service'
+
 // ---------- Report Services ----------
 import { getDashboardReport } from '@/lib/reports/dashboard-report'
 import { getInventoryReport } from '@/lib/reports/inventory-report'
@@ -149,14 +165,25 @@ function reportResponse(report, result, filters, options = {}) {
   })
 }
 
+class ApiRequestError extends Error {
+  constructor(message, status = 400) {
+    super(message)
+    this.status = status
+  }
+}
+
 // ---------- RBAC for Reports ----------
 const canViewReports = (role) =>
   role === 'ADMINISTRATOR' || role === 'SUPERVISOR' || role === 'STOCK_CONTROL'
 
+// ---------- RBAC for Stock Opname ----------
+const canManageStockOpname = (role) =>
+  role === 'ADMINISTRATOR' || role === 'SUPERVISOR' || role === 'STOCK_CONTROL'
+
 // ---------- Shared Filter Extractor ----------
 function extractFilters(searchParams) {
-  const limit = Math.min(Number(searchParams.get('limit')) || 500, 1000)
-  const offset = Number(searchParams.get('offset')) || 0
+  const limit = readIntParam(searchParams, 'limit', 500, 1000)
+  const offset = readIntParam(searchParams, 'offset', 0, 100000)
   const bucketsParam = searchParams.get('buckets')
   let buckets
   if (bucketsParam) {
@@ -184,14 +211,38 @@ function extractFilters(searchParams) {
 }
 
 const json = (data, status = 200) => NextResponse.json(data, { status })
-const err = (message, status = 400) => NextResponse.json({ error: message }, { status })
+
+function safeErrorMessage(message, status) {
+  const text = typeof message === 'string' && message.trim() ? message.trim() : 'Request failed'
+  if (status >= 500) return 'Internal server error'
+  if (/^\s*Invalid `prisma\./i.test(text) || /PrismaClient/i.test(text) || /\n/.test(text)) {
+    return status === 409 ? 'Conflict' : 'Invalid request'
+  }
+  return text
+}
+
+const err = (message, status = 400) => {
+  const safeMessage = safeErrorMessage(message, status)
+  return NextResponse.json({ success: false, message: safeMessage, error: safeMessage, errors: [{ message: safeMessage }] }, { status })
+}
+
+function readIntParam(searchParams, name, fallback, max) {
+  const raw = searchParams.get(name)
+  if (raw == null || raw === '') return fallback
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value < 0) throw new ApiRequestError(`${name} must be a non-negative integer`, 400)
+  return Math.min(value, max)
+}
+
+const getLimit = (searchParams, fallback = 100, max = 500) => readIntParam(searchParams, 'limit', fallback, max)
+
+const canOperate = (role) => canManageMaster(role) || role === 'STOCK_CONTROL'
 
 async function parseBody(request) {
-  try {
-    return await request.json()
-  } catch {
-    return {}
-  }
+  const text = await request.text()
+  if (!text.trim()) return {}
+  try { return JSON.parse(text) }
+  catch { throw new ApiRequestError('Request body must be valid JSON', 400) }
 }
 
 // ==================== AUTH ====================
@@ -225,7 +276,7 @@ async function handleDashboard() {
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
   sevenDaysAgo.setHours(0, 0, 0, 0)
 
-  const [totalItems, totalLocations, stockRows, todayMovements, recentLedger, recentAudit, pickingStats] = await Promise.all([
+  const [totalItems, totalLocations, stockRows, todayMovements, recentLedger, recentAudit, pickingStats, shipping] = await Promise.all([
     prisma.item.count({ where: { isActive: true } }),
     prisma.location.count({ where: { isActive: true } }),
     getStockOnHand(),
@@ -241,7 +292,7 @@ async function handleDashboard() {
     getShippingKPIs(),
   ])
 
-  const [pendingPicking, pickingInProgress, pickingCompletedToday, shipping] = pickingStats
+  const [pendingPicking, pickingInProgress, pickingCompletedToday] = pickingStats
 
   const totalUnits = stockRows.reduce((s, r) => s + r.qty, 0)
   const totalValue = stockRows.reduce((s, r) => s + r.qty * (r.item?.unitCost || 0), 0)
@@ -480,7 +531,7 @@ async function deleteLocation(user, id) {
 
 // ==================== LEDGER & AUDIT ====================
 async function listLedger(searchParams) {
-  const take = Math.min(Number(searchParams.get('limit')) || 100, 500)
+  const take = getLimit(searchParams, 100, 500)
   const where = {}
   if (searchParams.get('itemId')) where.itemId = searchParams.get('itemId')
   if (searchParams.get('locationId')) where.locationId = searchParams.get('locationId')
@@ -495,7 +546,7 @@ async function listLedger(searchParams) {
 }
 
 async function listAuditLogs(searchParams) {
-  const take = Math.min(Number(searchParams.get('limit')) || 200, 1000)
+  const take = getLimit(searchParams, 200, 1000)
   const where = {}
   if (searchParams.get('module')) where.module = searchParams.get('module')
   if (searchParams.get('action')) where.action = searchParams.get('action')
@@ -587,12 +638,12 @@ async function route(request, ctx) {
           const rs = await listReceivings({
             status: searchParams.get('status'),
             warehouseId: searchParams.get('warehouseId'),
-            take: Number(searchParams.get('limit')) || 100,
+            take: getLimit(searchParams),
           })
           return json(rs)
         }
         if (method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try {
             const r = await createReceivingDraft({ user, body })
@@ -609,7 +660,7 @@ async function route(request, ctx) {
             return json(r)
           }
           if (method === 'PUT') {
-            if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
             const body = await parseBody(request)
             try {
               const r = await updateReceivingDraft({ user, id, body })
@@ -617,11 +668,11 @@ async function route(request, ctx) {
             } catch (e) { return err(e.message, 400) }
           }
         } else if (sub === 'start' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           try { return json(await startReceiving({ user, id })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'post' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await postReceiving({ user, id, body })) }
           catch (e) { return err(e.message, 400) }
@@ -641,7 +692,7 @@ async function route(request, ctx) {
           const tasks = await listPutawayTasks({
             status: searchParams.get('status') || undefined,
             warehouseId: searchParams.get('warehouseId') || undefined,
-            take: Number(searchParams.get('limit')) || 100,
+            take: getLimit(searchParams),
           })
           return json(tasks)
         }
@@ -655,11 +706,11 @@ async function route(request, ctx) {
             return json(task)
           }
         } else if (sub === 'start' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           try { return json(await startPutawayTask({ user, id })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'complete' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await completePutawayTask({ user, id, body })) }
           catch (e) { return err(e.message, 400) }
@@ -680,7 +731,7 @@ async function route(request, ctx) {
         const card = await getStockCard({
           itemId,
           locationId: searchParams.get('locationId') || undefined,
-          limit: Number(searchParams.get('limit')) || 200,
+          limit: getLimit(searchParams, 200, 500),
         })
         return json(card)
       } catch (e) { return err(e.message, 400) }
@@ -696,7 +747,7 @@ async function route(request, ctx) {
           txnType: searchParams.get('txnType') || undefined,
           fromDate: searchParams.get('fromDate') || undefined,
           toDate: searchParams.get('toDate') || undefined,
-          limit: Number(searchParams.get('limit')) || 200,
+          limit: getLimit(searchParams, 200, 500),
         })
         return json(card)
       } catch (e) { return err(e.message, 400) }
@@ -709,12 +760,12 @@ async function route(request, ctx) {
           const result = await listAdjustments({
             status: searchParams.get('status') || undefined,
             warehouseId: searchParams.get('warehouseId') || undefined,
-            take: Number(searchParams.get('limit')) || 100,
+            take: getLimit(searchParams),
           })
           return json(result)
         }
         if (method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await createAdjustment({ user, body }), 201) }
           catch (e) { return err(e.message, 400) }
@@ -729,7 +780,7 @@ async function route(request, ctx) {
             return json(a)
           }
           if (method === 'PUT') {
-            if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
             const body = await parseBody(request)
             try { return json(await updateAdjustment({ user, id, body })) }
             catch (e) { return err(e.message, 400) }
@@ -739,7 +790,7 @@ async function route(request, ctx) {
           try { return json(await previewAdjustment({ lines: body?.lines || [], reasonCodeId: body?.reasonCodeId })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'post' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await postAdjustment({ user, id, body })) }
           catch (e) { return err(e.message, 400) }
@@ -759,12 +810,12 @@ async function route(request, ctx) {
           const result = await listCycleCounts({
             status: searchParams.get('status') || undefined,
             warehouseId: searchParams.get('warehouseId') || undefined,
-            take: Number(searchParams.get('limit')) || 100,
+            take: getLimit(searchParams),
           })
           return json(result)
         }
         if (method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await createCycleCount({ user, body }), 201) }
           catch (e) { return err(e.message, 400) }
@@ -784,16 +835,16 @@ async function route(request, ctx) {
             return json(cc)
           }
         } else if (sub === 'assign' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await assignCycleCount({ user, id, assignedToId: body?.assignedToId })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'start' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           try { return json(await startCycleCount({ user, id })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'submit' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await submitCycleCount({ user, id, body })) }
           catch (e) { return err(e.message, 400) }
@@ -817,12 +868,12 @@ async function route(request, ctx) {
           const result = await listMovements({
             status: searchParams.get('status') || undefined,
             warehouseId: searchParams.get('warehouseId') || undefined,
-            take: Number(searchParams.get('limit')) || 100,
+            take: getLimit(searchParams),
           })
           return json(result)
         }
         if (method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await createMovement({ user, body }), 201) }
           catch (e) { return err(e.message, 400) }
@@ -837,7 +888,7 @@ async function route(request, ctx) {
             return json(m)
           }
         } else if (sub === 'execute' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await postMovement({ user, id, body })) }
           catch (e) { return err(e.message, 400) }
@@ -861,12 +912,12 @@ async function route(request, ctx) {
           const result = await listPickingOrders({
             status: searchParams.get('status') || undefined,
             warehouseId: searchParams.get('warehouseId') || undefined,
-            take: Number(searchParams.get('limit')) || 100,
+            take: getLimit(searchParams),
           })
           return json(result)
         }
         if (method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await createPickingOrder({ user, body }), 201) }
           catch (e) { return err(e.message, 400) }
@@ -883,36 +934,36 @@ async function route(request, ctx) {
             return json(o)
           }
           if (method === 'PUT') {
-            if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
             const body = await parseBody(request)
             try { return json(await updatePickingOrder({ user, id, body })) }
             catch (e) { return err(e.message, 400) }
           }
         } else if (sub === 'suggest' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           try { return json(await generateFifoSuggestions({ user, id })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'assign' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await assignPicker({ user, id, assignedToId: body?.assignedToId })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'start' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           try { return json(await startPickingOrder({ user, id })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'pick-task' && taskId && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await executePickTask({ user, id, body: { taskId, ...body } })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'skip-task' && taskId && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await skipPickTask({ user, id, taskId, reason: body?.reason })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'complete' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           try { return json(await completePickingOrder({ user, id })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'cancel' && method === 'POST') {
@@ -949,13 +1000,13 @@ async function route(request, ctx) {
         if (method === 'GET') {
           const result = await listPackingOrders({
             status: searchParams.get('status') || undefined,
-            take: Number(searchParams.get('limit')) || 100,
+            take: getLimit(searchParams),
           })
           return json(result)
         }
         // POST /api/packing
         if (method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await createPackingOrder({ user, body }), 201) }
           catch (e) { return err(e.message, 400) }
@@ -975,17 +1026,17 @@ async function route(request, ctx) {
             return json(o)
           }
           if (method === 'PUT') {
-            if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
             const body = await parseBody(request)
             try { return json(await assignPacker({ user, id, assignedToId: body?.assignedToId })) }
             catch (e) { return err(e.message, 400) }
           }
         } else if (sub === 'start' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           try { return json(await startPackingOrder({ user, id })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'complete' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           try { return json(await completePackingOrder({ user, id })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'cancel' && method === 'POST') {
@@ -999,7 +1050,7 @@ async function route(request, ctx) {
           if (!pkgId) {
             // POST /api/packing/:id/packages — create package
             if (method === 'POST') {
-              if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+              if (!canOperate(user.role)) return err('Insufficient permissions', 403)
               try { return json(await createPackage({ user, id }), 201) }
               catch (e) { return err(e.message, 400) }
             }
@@ -1015,7 +1066,7 @@ async function route(request, ctx) {
               }
               // PUT /api/packing/:id/packages/:pkgId — update weight/dims
               if (method === 'PUT') {
-                if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+                if (!canOperate(user.role)) return err('Insufficient permissions', 403)
                 const body = await parseBody(request)
                 try { return json(await updatePackage({ user, id: pkgId, body })) }
                 catch (e) { return err(e.message, 400) }
@@ -1024,18 +1075,18 @@ async function route(request, ctx) {
               const action = path[4]
               if (action === 'scan' && method === 'POST') {
                 // POST /api/packing/:id/packages/:pkgId/scan
-                if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+                if (!canOperate(user.role)) return err('Insufficient permissions', 403)
                 const body = await parseBody(request)
                 try { return json(await scanItemToPackage({ user, id, body: { packageId: pkgId, ...body } })) }
                 catch (e) { return err(e.message, 400) }
               } else if (action === 'close' && method === 'POST') {
                 // POST /api/packing/:id/packages/:pkgId/close
-                if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+                if (!canOperate(user.role)) return err('Insufficient permissions', 403)
                 try { return json(await closePackage({ user, id: pkgId })) }
                 catch (e) { return err(e.message, 400) }
               } else if (action === 'reopen' && method === 'POST') {
                 // POST /api/packing/:id/packages/:pkgId/reopen
-                if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+                if (!canOperate(user.role)) return err('Insufficient permissions', 403)
                 try { return json(await reopenPackage({ user, id: pkgId })) }
                 catch (e) { return err(e.message, 400) }
               }
@@ -1064,13 +1115,13 @@ async function route(request, ctx) {
         if (method === 'GET') {
           const result = await listShipments({
             status: searchParams.get('status') || undefined,
-            take: Number(searchParams.get('limit')) || 100,
+            take: getLimit(searchParams),
           })
           return json(result)
         }
         // POST /api/shipping — create shipment from packing order
         if (method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           const body = await parseBody(request)
           try { return json(await createShipment({ user, body }), 201) }
           catch (e) { return err(e.message, 400) }
@@ -1089,24 +1140,24 @@ async function route(request, ctx) {
             return json(s)
           }
           if (method === 'PUT') {
-            if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
             const body = await parseBody(request)
             try { return json(await assignShipper({ user, id, assignedToId: body?.assignedToId })) }
             catch (e) { return err(e.message, 400) }
           }
         } else if (sub === 'start' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           try { return json(await startShipment({ user, id })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'preview' && method === 'POST') {
           try { return json(await previewShipment({ id })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'confirm' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           try { return json(await confirmShipment({ user, id })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'retry' && method === 'POST') {
-          if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
           try { return json(await retryShipment({ user, id })) }
           catch (e) { return err(e.message, 400) }
         } else if (sub === 'cancel' && method === 'POST') {
@@ -1123,22 +1174,131 @@ async function route(request, ctx) {
           const body = await parseBody(request)
           if (action === 'scan') {
             // POST /api/shipping/:id/packages/:pkgId/scan — validate + add package
-            if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
             try { return json(await scanPackage({ user, id, body: { packageNumber: pkgId, ...body } })) }
             catch (e) { return err(e.message, 400) }
           } else if (action === 'verify') {
             // POST /api/shipping/:id/packages/:pkgId/verify — mark VERIFIED
-            if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
             try { return json(await verifyPackage({ user, id, body: { packageId: pkgId, ...body } })) }
             catch (e) { return err(e.message, 400) }
           } else if (action === 'serials') {
             // POST /api/shipping/:id/packages/:pkgId/serials — verify serials + mark VERIFIED
-            if (!canManageMaster(user.role) && user.role !== 'STOCK_CONTROL') return err('Insufficient permissions', 403)
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
             try { return json(await verifySerials({ user, id, body: { packageId: pkgId, ...body } })) }
             catch (e) { return err(e.message, 400) }
           } else {
             return err('Unknown package action: ' + action, 400)
           }
+        }
+      }
+    }
+
+    // ==================== STOCK OPNAME ====================
+    if (seg === 'stock-opname') {
+      if (!path[1]) {
+        // GET /api/stock-opname — list
+        if (method === 'GET') {
+          if (!canManageStockOpname(user.role)) return err('Insufficient permissions', 403)
+          try {
+            const result = await listStockOpnames({
+              status: searchParams.get('status') || undefined,
+              take: getLimit(searchParams),
+              skip: readIntParam(searchParams, 'offset', 0, 100000),
+            })
+            return json(result)
+          } catch (e) { return err(e.message, 400) }
+        }
+        // POST /api/stock-opname — create draft
+        if (method === 'POST') {
+          if (!canManageStockOpname(user.role)) return err('Insufficient permissions', 403)
+          const body = await parseBody(request)
+          try { return json(await createStockOpname({ user, body }), 201) }
+          catch (e) { return err(e.message, 400) }
+        }
+      } else {
+        const id = path[1]
+        const sub = path[2]
+
+        // GET /api/stock-opname/:id
+        if (!sub && method === 'GET') {
+          if (!canManageStockOpname(user.role)) return err('Insufficient permissions', 403)
+          try {
+            const so = await getStockOpname(id)
+            if (!so) return err('Stock opname not found', 404)
+            return json(so)
+          } catch (e) { return err(e.message, 400) }
+        }
+        // POST /api/stock-opname/:id/start
+        else if (sub === 'start' && method === 'POST') {
+          if (!canManageStockOpname(user.role)) return err('Insufficient permissions', 403)
+          const body = await parseBody(request)
+          // Validate required payload
+          if (body && body.itemIds != null && !Array.isArray(body.itemIds)) {
+            return err('itemIds must be an array', 400)
+          }
+          try { return json(await startStockOpname({ user, id, body })) }
+          catch (e) { return err(e.message, 400) }
+        }
+        // POST /api/stock-opname/:id/scan-location
+        else if (sub === 'scan-location' && method === 'POST') {
+          if (!canManageStockOpname(user.role)) return err('Insufficient permissions', 403)
+          const body = await parseBody(request)
+          if (!body?.locationCode) return err('locationCode is required', 400)
+          try { return json(await scanLocation({ user, id, body })) }
+          catch (e) { return err(e.message, 400) }
+        }
+        // POST /api/stock-opname/:id/scan-item
+        else if (sub === 'scan-item' && method === 'POST') {
+          if (!canManageStockOpname(user.role)) return err('Insufficient permissions', 403)
+          const body = await parseBody(request)
+          if (!body?.barcode) return err('barcode is required', 400)
+          try { return json(await scanItem({ user, id, body })) }
+          catch (e) { return err(e.message, 400) }
+        }
+        // PATCH /api/stock-opname/:id/count
+        else if (sub === 'count' && method === 'PATCH') {
+          if (!canManageStockOpname(user.role)) return err('Insufficient permissions', 403)
+          const body = await parseBody(request)
+          if (!body?.lineId) return err('lineId is required', 400)
+          if (body.countedQty == null) return err('countedQty is required', 400)
+          const qty = Number(body.countedQty)
+          if (isNaN(qty) || qty < 0) return err('countedQty must be a non-negative number', 400)
+          try { return json(await updateCountedQty({ user, id, body })) }
+          catch (e) { return err(e.message, 400) }
+        }
+        // POST /api/stock-opname/:id/submit
+        else if (sub === 'submit' && method === 'POST') {
+          if (!canManageStockOpname(user.role)) return err('Insufficient permissions', 403)
+          try { return json(await submitStockOpname({ user, id })) }
+          catch (e) { return err(e.message, 400) }
+        }
+        // POST /api/stock-opname/:id/reject
+        else if (sub === 'reject' && method === 'POST') {
+          if (!canManageStockOpname(user.role)) return err('Insufficient permissions', 403)
+          const body = await parseBody(request)
+          try { return json(await rejectStockOpname({ user, id, body })) }
+          catch (e) { return err(e.message, 400) }
+        }
+        // POST /api/stock-opname/:id/approve
+        else if (sub === 'approve' && method === 'POST') {
+          if (!canManageStockOpname(user.role)) return err('Insufficient permissions', 403)
+          const body = await parseBody(request)
+          try { return json(await approveStockOpname({ user, id, body })) }
+          catch (e) { return err(e.message, 400) }
+        }
+        // POST /api/stock-opname/:id/cancel
+        else if (sub === 'cancel' && method === 'POST') {
+          if (!canManageStockOpname(user.role)) return err('Insufficient permissions', 403)
+          const body = await parseBody(request)
+          try { return json(await cancelStockOpname({ user, id, body })) }
+          catch (e) { return err(e.message, 400) }
+        }
+        // GET /api/stock-opname/:id/summary
+        else if (sub === 'summary' && method === 'GET') {
+          if (!canManageStockOpname(user.role)) return err('Insufficient permissions', 403)
+          try { return json(await getVarianceSummary(id)) }
+          catch (e) { return err(e.message, 400) }
         }
       }
     }
@@ -1218,7 +1378,7 @@ async function route(request, ctx) {
     return err('Not found', 404)
   } catch (e) {
     console.error('API error:', e)
-    return err('Internal server error: ' + e.message, 500)
+    return err(e instanceof ApiRequestError ? e.message : 'Internal server error', e.status || 500)
   }
 }
 
@@ -1229,6 +1389,9 @@ export async function POST(request, ctx) {
   return route(request, ctx)
 }
 export async function PUT(request, ctx) {
+  return route(request, ctx)
+}
+export async function PATCH(request, ctx) {
   return route(request, ctx)
 }
 export async function DELETE(request, ctx) {

@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+export const dynamic = 'force-dynamic'
+
+import { use, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -11,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ErrorState } from '@/components/ErrorState'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
@@ -59,13 +62,42 @@ function StatusFlow({ status }) {
 }
 
 const App = ({ params }) => {
-  const { id } = params
+  const { id } = use(params)
   const router = useRouter()
   const qc = useQueryClient()
+
+  const [error, setError] = useState(null)
+  const [activeEditRow, setActiveEditRow] = useState(-1) // which row is focused
+  const [activeEditField, setActiveEditField] = useState('') // 'itemId' | 'locationId' | 'qty' | 'unitCost'
+  const lineItemRefs = useRef([])
+  const lineLocationRefs = useRef([])
+  const lineQtyRefs = useRef([])
+  const lineCostRefs = useRef([])
+  const previewButtonRef = useRef(null)
+
+  const handleLineKeyDown = (e, rowIdx, field) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    const totalLines = (editLines || data?.lines || []).length
+    if (field === 'itemId') {
+      lineLocationRefs.current[rowIdx]?.focus()
+    } else if (field === 'locationId') {
+      lineQtyRefs.current[rowIdx]?.focus()
+    } else if (field === 'qty') {
+      lineCostRefs.current[rowIdx]?.focus()
+    } else if (field === 'unitCost') {
+      if (rowIdx < totalLines - 1) {
+        lineItemRefs.current[rowIdx + 1]?.focus()
+      } else if (isDraft && !previewLoading) {
+        previewButtonRef.current?.focus()
+      }
+    }
+  }
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['adjustment', id],
     queryFn: () => api(`/adjustments/${id}`),
+    onError: (e) => setError(e),
   })
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: () => api('/meta') })
@@ -161,12 +193,14 @@ const App = ({ params }) => {
     )
   }
 
-  if (!data) {
+  if (error || !data) {
     return (
-      <AppShell title="Adjustment" subtitle="Not found">
-        <div className="rounded-md border p-8 text-center text-sm text-gray-500">
-          Adjustment not found. <Link className="text-blue-600 underline" href="/adjustment">Back to list</Link>
-        </div>
+      <AppShell title="Adjustment" subtitle="Error">
+        <ErrorState
+          error={error}
+          onRetry={() => { setError(null); refetch() }}
+          title="Failed to load adjustment"
+        />
       </AppShell>
     )
   }
@@ -228,6 +262,7 @@ const App = ({ params }) => {
                       </Button>
                     )}
                     <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700"
+                      ref={previewButtonRef}
                       onClick={openPreview}
                       disabled={previewLoading}>
                       {previewLoading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Play className="mr-1 h-3.5 w-3.5" />}
@@ -294,7 +329,13 @@ const App = ({ params }) => {
                     <td className="px-4 py-2">
                       {editLines ? (
                         <Select value={line.itemId} onValueChange={(v) => updateEditLine(i, 'itemId', v)}>
-                          <SelectTrigger className="h-7 w-40 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectTrigger
+                            ref={(el) => { lineItemRefs.current[i] = el ? el.querySelector('[role="combobox"]') : null }}
+                            className="h-7 w-40 text-xs"
+                            onKeyDown={(e) => handleLineKeyDown(e, i, 'itemId')}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
                           <SelectContent>
                             {meta?.items?.map((it) => (
                               <SelectItem key={it.id} value={it.id} className="text-xs">{it.sku} — {it.name}</SelectItem>
@@ -308,7 +349,13 @@ const App = ({ params }) => {
                     <td className="px-4 py-2">
                       {editLines ? (
                         <Select value={line.locationId} onValueChange={(v) => updateEditLine(i, 'locationId', v)}>
-                          <SelectTrigger className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectTrigger
+                            ref={(el) => { lineLocationRefs.current[i] = el ? el.querySelector('[role="combobox"]') : null }}
+                            className="h-7 w-28 text-xs"
+                            onKeyDown={(e) => handleLineKeyDown(e, i, 'locationId')}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
                           <SelectContent>
                             {flatLocations.map((loc) => (
                               <SelectItem key={loc.id} value={loc.id} className="text-xs">{loc.code}</SelectItem>
@@ -324,9 +371,14 @@ const App = ({ params }) => {
                     </td>
                     <td className="px-4 py-2 text-right">
                       {editLines ? (
-                        <Input type="number" value={line.qty}
+                        <Input
+                          type="number"
+                          value={line.qty}
                           onChange={(e) => updateEditLine(i, 'qty', e.target.value)}
-                          className="h-7 w-24 text-xs tabular-nums text-right" />
+                          onKeyDown={(e) => handleLineKeyDown(e, i, 'qty')}
+                          ref={(el) => { lineQtyRefs.current[i] = el }}
+                          className="h-7 w-24 text-xs tabular-nums text-right"
+                        />
                       ) : (
                         <span className={`inline-flex items-center gap-1 tabular-nums text-xs font-medium ${isIn ? 'text-green-600' : 'text-red-600'}`}>
                           {isIn ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
@@ -336,9 +388,16 @@ const App = ({ params }) => {
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums text-xs text-gray-500">
                       {editLines ? (
-                        <Input type="number" min="0" step="0.0001" value={line.unitCost || ''}
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.0001"
+                          value={line.unitCost || ''}
                           onChange={(e) => updateEditLine(i, 'unitCost', e.target.value)}
-                          className="h-7 w-24 text-xs tabular-nums text-right" />
+                          onKeyDown={(e) => handleLineKeyDown(e, i, 'unitCost')}
+                          ref={(el) => { lineCostRefs.current[i] = el }}
+                          className="h-7 w-24 text-xs tabular-nums text-right"
+                        />
                       ) : (
                         line.unitCost != null ? '$' + Number(line.unitCost).toFixed(4) : '-'
                       )}

@@ -49,7 +49,7 @@ const NAV_SECTIONS = [
     label: 'Inventory Control',
     items: [
       { href: '/cycle-count', label: 'Cycle Count', icon: ClipboardList },
-      { href: '/stock-opname', label: 'Stock Opname', icon: CalendarCheck, soon: true },
+      { href: '/stock-opname', label: 'Stock Opname', icon: CalendarCheck },
     ],
   },
   {

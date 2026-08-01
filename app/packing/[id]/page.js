@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+export const dynamic = 'force-dynamic'
+
+import { use, useState, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
@@ -62,7 +64,8 @@ function computePackedSerialsByItem(packages) {
 }
 
 export default function PackingDetailPage({ params }) {
-  const packingId = params.id
+  const { id } = use(params)
+  const packingId = id
   const qc = useQueryClient()
 
   // Active package selection — exactly one OPEN package at a time

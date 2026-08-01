@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -9,6 +11,7 @@ import AppShell from '@/components/app-shell'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/ErrorState'
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '@/components/ui/select'
@@ -29,7 +32,7 @@ const App = () => {
   const qc = useQueryClient()
   const [status, setStatus] = useState('ALL')
 
-  const { data: list, isLoading } = useQuery({
+  const { data: list, isLoading, error, refetch } = useQuery({
     queryKey: ['putaway-list', status],
     queryFn: () => api(`/putaway${status !== 'ALL' ? `?status=${status}` : ''}`),
   })
@@ -73,6 +76,10 @@ const App = () => {
           {isLoading ? (
             <div className="space-y-2 p-4">
               {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
+          ) : error ? (
+            <div className="p-4">
+              <ErrorState error={error} onRetry={() => refetch()} title="Failed to load putaway tasks" />
             </div>
           ) : !list?.length ? (
             <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center">

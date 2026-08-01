@@ -29,19 +29,16 @@ The system focuses on:
 
 **Current Milestone**
 
-✅ Milestone 7 — Shipping (Complete)
+✅ Milestone 8 — Reports & Analytics (Complete)
+✅ Milestone 9 — Stock Opname (Phase 9.1–9.5 Complete)
 
 **Next Milestone**
 
-Milestone 8 — Reports & Analytics
-
-**Backfill Required**
-
-Shipping uses `PackageAllocation` junction table. Run `node scripts/backfill-package-allocations.js` once for any pre-existing PackageItem records.
+v1.0.0 — Release Preparation (Milestone 9.5D Production Readiness Review Complete)
 
 **Current Version**
 
-v0.8.0
+v0.9.7
 
 **Project Status**
 
@@ -60,6 +57,9 @@ Active Development
 | Milestone 5 | Picking | ✅ Complete |
 | Milestone 6 | Packing | ✅ Complete |
 | Milestone 7 | Shipping | ✅ Complete |
+| Milestone 8 | Reports & Analytics | ✅ Complete |
+| Milestone 9 | Stock Opname | ✅ Complete |
+| v1.0.0 | Stable Release | 🔄 In Progress |
 
 ---
 
@@ -310,7 +310,6 @@ Active Development
 - Radix UI
 - React Hook Form
 - TanStack React Query
-- Framer Motion
 
 ---
 
@@ -405,34 +404,63 @@ The system follows these core architectural principles:
 
 ---
 
-## Milestone 9 — Multi Warehouse
+## Milestone 9 — Stock Opname (Phase 9.1 Complete)
 
-### Warehouse Management
+**Status:** ⏳ In Progress
 
-- Multiple Warehouse Support
-- Warehouse-specific Inventory
-- Inter-Warehouse Transfer
-- Warehouse Dashboard
-- Warehouse Performance KPI
+### Phase 9.1 — Foundation & Database (COMPLETED)
+
+- Schema extensions for StockOpname
+- Schema extensions for StockOpnameLine
+- SO numbering support in doc-numbering.js
+- Database migration complete
+- Prisma client generated
+
+### Phase 9.2 — Service Layer (COMPLETED)
+
+- Created lib/stock-opname-service.js
+- All business logic lives in service layer
+- Service NEVER touches Prisma directly from API layer
+
+### Phase 9.3 — API Endpoints (COMPLETED)
+
+- All routes registered in app/api/[[...path]]/route.js
+- RBAC enforced at API layer
+- Request validation at API layer
+- 11 endpoints implemented
+
+### Phase 9.4 — UI (COMPLETED)
+
+- 3 pages: list, new, detail
+- 7 reusable components
+- Barcode-friendly scanning workflow
+- Status-colored variance indicators
+- Inline count input with Enter-key navigation
+
+### Phase 9.5 — Hardening (COMPLETED)
+
+- 9.5A — UX Hardening: error/loading/empty states, keyboard-friendly focus
+- 9.5B — API Hardening: strict parsing, bounded pagination, sanitized errors, PATCH route
+- 9.5C — Data Integrity & Transaction Audit: putaway FIFO consumption fix
+- 9.5D — Production Readiness Review: dead code removal, config/dependency audit
 
 ---
 
-## Milestone 10 — Production Hardening
+## v1.0.0 — Release Preparation
 
-### Enterprise Readiness
+### Done (Phase 9.5D)
 
-- Performance Optimization
-- Database Optimization
-- Background Job Processing
-- Concurrency & Stress Testing
-- Monitoring & Logging
-- Backup & Disaster Recovery
-- Security Hardening
-- CI/CD Pipeline
-- Production Deployment
-- Technical Documentation
-- API Documentation
-- User Documentation
+- Build review — removed invalid `dynamicRoutes` next.config key
+- Removed legacy `pages/` router, dead `app/providers.js`, `lib/constants`, root scratch scripts
+- Dependency audit — removed 9 unused packages, declared `xlsx`, upgraded `next` to 15.5.22, patched `postcss`/`sharp` overrides
+- Environment — added `.env.example` documenting all required variables
+- Documentation — README + memory files synced to v0.9.7
+
+### Remaining (after approval)
+
+- Prisma CLI upgrade (dev-tooling `effect` advisory)
+- Fix 22 pre-existing reports acceptance test failures
+- Optional: remove unused shadcn/ui components and their Radix deps
 
 ---
 
@@ -447,25 +475,25 @@ The system follows these core architectural principles:
 | Milestone 5 | Picking | ✅ Completed |
 | Milestone 6 | Packing | ✅ Completed |
 | Milestone 7 | Shipping | ✅ Completed |
-| Milestone 8 | Reports & Analytics | ⏳ Planned |
-| Milestone 9 | Multi Warehouse | ⏳ Planned |
-| Milestone 10 | Production Hardening | ⏳ Planned |
+| Milestone 8 | Reports & Analytics | ✅ Completed |
+| Milestone 9 | Stock Opname | ✅ Completed |
+| v1.0.0 | Stable Release | 🔄 In Progress |
 
 ---
 
 # Project Summary
 
-**Current Version:** `v0.7.0`
+**Current Version:** `v0.9.7`
 
-**Project Status:** Active Development
+**Project Status:** Release Candidate — preparing v1.0.0
 
-**Completed Milestones:** **7 / 10**
+**Completed Milestones:** **9 / 10**
 
-**Project Completion:** **70%**
+**Project Completion:** **90%**
 
 The Warehouse Management System now supports a complete warehouse operational workflow:
 
-Receiving → Putaway → Stock Movement → Stock Adjustment → Cycle Count → Picking → Packing → Shipping
+Receiving → Putaway → Stock Movement → Stock Adjustment → Cycle Count → Picking → Packing → Shipping → Stock Opname
 
 with full support for:
 

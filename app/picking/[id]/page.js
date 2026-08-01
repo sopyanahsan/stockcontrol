@@ -1,6 +1,8 @@
 'use client'
 
-import { useMemo, useState, useCallback } from 'react'
+export const dynamic = 'force-dynamic'
+
+import { use, useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -11,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ErrorState } from '@/components/ErrorState'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
@@ -75,14 +78,34 @@ function StatusFlow({ status }) {
 }
 
 const App = ({ params }) => {
-  const { id } = params
+  const { id } = use(params)
   const router = useRouter()
   const qc = useQueryClient()
+
+  const [error, setError] = useState(null)
+  const activeTaskRowRef = useRef(null)
+  const [activeTaskId, setActiveTaskId] = useState(null)
+  const [step, setStep] = useState(1) // 1=location, 2=item, 3=serial, 4=qty, 5=confirm
+  const [scannedLocation, setScannedLocation] = useState(null)
+  const [scannedItem, setScannedItem] = useState(null)
+  const [serials, setSerials] = useState([])
+  const [qtyInput, setQtyInput] = useState('')
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [skipOpen, setSkipOpen] = useState(false)
+  const [skipReason, setSkipReason] = useState('')
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['picking', id],
     queryFn: () => api(`/picking/${id}`),
+    onError: (e) => setError(e),
   })
+
+  // Scroll active task row into view
+  useEffect(() => {
+    if (activeTaskId && activeTaskRowRef.current) {
+      activeTaskRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [activeTaskId])
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: () => api('/meta') })
 
@@ -116,17 +139,6 @@ const App = ({ params }) => {
     onSuccess: () => { toast.success('Order cancelled'); router.push('/picking') },
     onError: (e) => toast.error(e.message),
   })
-
-  // Execution state
-  const [activeTaskId, setActiveTaskId] = useState(null)
-  const [step, setStep] = useState(1) // 1=location, 2=item, 3=serial, 4=qty, 5=confirm
-  const [scannedLocation, setScannedLocation] = useState(null)
-  const [scannedItem, setScannedItem] = useState(null)
-  const [serials, setSerials] = useState([])
-  const [qtyInput, setQtyInput] = useState('')
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [skipOpen, setSkipOpen] = useState(false)
-  const [skipReason, setSkipReason] = useState('')
 
   // Errors
   const [locationError, setLocationError] = useState('')
@@ -363,12 +375,14 @@ const App = ({ params }) => {
     )
   }
 
-  if (!data) {
+  if (error || !data) {
     return (
-      <AppShell title="Picking Order" subtitle="Not found">
-        <div className="rounded-md border p-8 text-center text-sm text-gray-500">
-          Order not found. <Link className="text-blue-600 underline" href="/picking">Back to list</Link>
-        </div>
+      <AppShell title="Picking Order" subtitle="Error">
+        <ErrorState
+          error={error}
+          onRetry={() => { setError(null); refetch() }}
+          title="Failed to load picking order"
+        />
       </AppShell>
     )
   }
@@ -542,7 +556,7 @@ const App = ({ params }) => {
                         const isPickable = data.status === 'IN_PROGRESS' && (task.status === 'OPEN' || task.status === 'IN_PROGRESS')
 
                         return (
-                          <div key={task.id} className={`px-4 py-2 ${isActive ? 'bg-blue-50' : ''}`}>
+                          <div key={task.id} ref={isActive ? activeTaskRowRef : null} className={`px-4 py-2 ${isActive ? 'bg-blue-50' : ''}`}>
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-3">
                                 <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-medium ${

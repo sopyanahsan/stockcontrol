@@ -1,8 +1,8 @@
 # Enterprise Stock Control & Warehouse Management System (WMS)
 
-> **Version:** v0.8.0
-> **Status:** Active Development
-> **Current Milestone:** Milestone 9 — Awaiting Definition
+> **Version:** v0.9.7
+> **Status:** Release Candidate — preparing v1.0.0
+> **Current Milestone:** Milestone 9 — Stock Opname & Production Hardening (Complete)
 
 ---
 
@@ -81,8 +81,8 @@ Every inventory transaction is recorded in the **Stock Ledger** and protected by
 | M6 | Packing | ✅ Complete |
 | M7 | Shipping | ✅ Complete |
 | M8 | Reports & Analytics | ✅ Complete |
-| M9 | Multi Warehouse | ⏳ Planned |
-| M10 | Production Hardening | ⏳ Planned |
+| M9 | Stock Opname & Production Hardening | ✅ Complete |
+| v1.0.0 | Stable Release (hardening, docs, release readiness) | 🔄 In Progress |
 
 ---
 
@@ -114,6 +114,7 @@ Every inventory transaction is recorded in the **Stock Ledger** and protected by
 - Stock Movement
 - Stock Adjustment
 - Cycle Count
+- Stock Opname
 
 ### Outbound
 
@@ -144,7 +145,6 @@ Every inventory transaction is recorded in the **Stock Ledger** and protected by
 - React Hook Form
 - TanStack React Query
 - Recharts
-- Framer Motion
 
 ---
 
@@ -197,9 +197,11 @@ cycle-count-service.js
 picking-service.js
 packing-service.js
 shipping-service.js
+stock-opname-service.js
 
 fifo-service.js
 stock-validation.js
+stock.js
 barcode-service.js
 audit.js
 doc-numbering.js
@@ -248,20 +250,24 @@ npm install
 
 ## 2. Environment Variables
 
-Create:
+Copy the template:
 
-```
-.env
+```bash
+cp .env.example .env
 ```
 
-Example:
+Then fill in the values in `.env`:
 
 ```env
 DATABASE_URL="postgresql://..."
-
 JWT_SECRET="your-secret"
-
 NODE_ENV="development"
+```
+
+Optional:
+
+```env
+CORS_ORIGINS="https://app.example.com"
 ```
 
 ---
@@ -285,13 +291,24 @@ npx prisma db push
 ## 5. Run Development Server
 
 ```bash
-npx next dev
+npm run dev
 ```
 
 Open:
 
 ```
 http://localhost:3000
+```
+
+> On Windows, `npm run dev` sets a Linux-style `NODE_OPTIONS`; use `npm run dev:no-reload` instead.
+
+---
+
+## 6. Production Build
+
+```bash
+npm run build
+npm start
 ```
 
 ---
@@ -337,6 +354,12 @@ Acceptance tests are located in:
 tests/
 ```
 
+Run the full suite (serially, against a seeded Neon database):
+
+```bash
+npm test -- --runInBand
+```
+
 Current completed modules include:
 
 - Receiving
@@ -347,7 +370,7 @@ Current completed modules include:
 - Picking
 - Packing
 - Shipping
-- Reports & Analytics (61 tests)
+- Reports & Analytics
 
 ---
 
