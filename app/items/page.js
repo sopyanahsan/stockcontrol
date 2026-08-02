@@ -140,6 +140,7 @@ const App = () => {
     onSuccess: () => {
       toast.success(editing ? 'Item updated' : 'Item created')
       queryClient.invalidateQueries({ queryKey: ['items'] })
+      queryClient.invalidateQueries({ queryKey: ['meta'] })
       setDialogOpen(false)
     },
     onError: (e) => toast.error(e.message),
@@ -150,6 +151,7 @@ const App = () => {
     onSuccess: (res) => {
       toast.success(res.deactivated ? 'Item deactivated (has ledger history)' : 'Item deleted')
       queryClient.invalidateQueries({ queryKey: ['items'] })
+      queryClient.invalidateQueries({ queryKey: ['meta'] })
       setDeleting(null)
     },
     onError: (e) => toast.error(e.message),
@@ -255,7 +257,10 @@ const App = () => {
       <ImportWizard
         open={importOpen}
         onOpenChange={setImportOpen}
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['items'] })}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['items'] })
+          queryClient.invalidateQueries({ queryKey: ['meta'] })
+        }}
       />
 
       {/* Create / Edit dialog */}

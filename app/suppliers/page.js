@@ -134,13 +134,19 @@ const App = () => {
     setDialogOpen(true)
   }
 
+  const invalidateSupplierQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['suppliers'] })
+    queryClient.invalidateQueries({ queryKey: ['meta'] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    queryClient.invalidateQueries({ queryKey: ['reports'] })
+  }
+
   const saveMutation = useMutation({
     mutationFn: (values) =>
       editing ? api(`/suppliers/${editing.id}`, { method: 'PUT', body: values }) : api('/suppliers', { method: 'POST', body: values }),
     onSuccess: () => {
       toast.success(editing ? 'Supplier updated' : 'Supplier created')
-      queryClient.invalidateQueries({ queryKey: ['suppliers'] })
-      queryClient.invalidateQueries({ queryKey: ['meta'] })
+      invalidateSupplierQueries()
       setDialogOpen(false)
     },
     onError: (e) => toast.error(e.message),
@@ -150,8 +156,7 @@ const App = () => {
     mutationFn: (id) => api(`/suppliers/${id}`, { method: 'DELETE' }),
     onSuccess: (res) => {
       toast.success(res.deactivated ? 'Supplier deactivated' : 'Supplier deleted')
-      queryClient.invalidateQueries({ queryKey: ['suppliers'] })
-      queryClient.invalidateQueries({ queryKey: ['meta'] })
+      invalidateSupplierQueries()
       setDeleting(null)
     },
     onError: (e) => toast.error(e.message),
@@ -257,10 +262,7 @@ const App = () => {
       <SupplierImportWizard
         open={importOpen}
         onOpenChange={setImportOpen}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['suppliers'] })
-          queryClient.invalidateQueries({ queryKey: ['meta'] })
-        }}
+        onSuccess={invalidateSupplierQueries}
       />
 
       {/* Create / Edit dialog */}

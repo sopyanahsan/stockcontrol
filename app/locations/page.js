@@ -49,6 +49,7 @@ const App = () => {
       toast.success('Location created')
       queryClient.invalidateQueries({ queryKey: ['locations'] })
       queryClient.invalidateQueries({ queryKey: ['warehouses'] })
+      queryClient.invalidateQueries({ queryKey: ['meta'] })
       setLocDialog(false)
       setLocForm({ zoneId: '', code: '', type: 'STORAGE' })
     },
@@ -60,6 +61,7 @@ const App = () => {
     onSuccess: () => {
       toast.success('Zone created')
       queryClient.invalidateQueries({ queryKey: ['warehouses'] })
+      queryClient.invalidateQueries({ queryKey: ['meta'] })
       setZoneDialog(false)
       setZoneForm({ warehouseId: '', code: '', name: '' })
     },

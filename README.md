@@ -418,6 +418,23 @@ Every AI assistant or developer joining this project should read documents in th
 
 ---
 
+## Running Tests
+
+The Jest suite requires a dedicated test database.
+
+Create:
+
+.env.test
+
+DATABASE_URL=<test database>
+
+This file is intentionally gitignored.
+
+If unavailable, contributors should:
+
+- Run npm run build
+- Skip the Jest suite
+
 # License
 
 Private Project.

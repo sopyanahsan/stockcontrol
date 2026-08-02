@@ -12,7 +12,7 @@ import { isInitialized } from '@/lib/init'
 //   - /api/setup  -> 403
 //   - /setup      -> redirect to the dashboard
 //
-// Node.js runtime (stable since Next.js 15.5) so Prisma can query the DB.
+// Node.js runtime so Prisma can query the database.
 // ============================================================
 
 export const config = {
@@ -26,13 +26,25 @@ export async function middleware(request) {
   const isSetupPage = pathname === '/setup'
   const isSetupApi = pathname === '/api/setup'
   const isLoginPage = pathname === '/login'
-  const isAuthApi = pathname === '/api/auth' || pathname.startsWith('/api/auth/')
+  const isAuthApi =
+    pathname === '/api/auth' ||
+    pathname.startsWith('/api/auth/')
 
   const initialized = await isInitialized()
+
+  // ================= DEBUG LOG =================
+  console.log('========================================')
+  console.log('[Middleware]')
+  console.log('PATH        :', pathname)
+  console.log('INITIALIZED :', initialized)
+  console.log('========================================')
+  // =============================================
 
   // ---- After initialization: /setup is locked forever ----
   if (initialized) {
     if (isSetupApi) {
+      console.log('[Middleware] Setup API blocked (already initialized)')
+
       return NextResponse.json(
         {
           success: false,
@@ -43,11 +55,22 @@ export async function middleware(request) {
         { status: 403 }
       )
     }
-    if (isSetupPage) return NextResponse.redirect(new URL('/', request.url))
+
+    if (isSetupPage) {
+      console.log('[Middleware] Redirect /setup -> /')
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+
+    console.log('[Middleware] Allow request')
     return NextResponse.next()
   }
 
-  // ---- Not initialized: force everything toward /setup ----
-  if (isSetupPage || isSetupApi || isLoginPage || isAuthApi) return NextResponse.next()
+  // ---- Not initialized ----
+  if (isSetupPage || isSetupApi || isLoginPage || isAuthApi) {
+    console.log('[Middleware] Allow setup/auth route')
+    return NextResponse.next()
+  }
+
+  console.log('[Middleware] Redirect -> /setup')
   return NextResponse.redirect(new URL('/setup', request.url))
 }

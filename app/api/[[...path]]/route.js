@@ -836,7 +836,7 @@ async function deleteUom(user, id) {
 
 // ==================== LOCATIONS ====================
 async function listWarehouses() {
-  const warehouses = await prisma.warehouse.findMany({ include: { zones: { include: { locations: true }, orderBy: { code: 'asc' } } }, orderBy: { code: 'asc' } })
+  const warehouses = await prisma.warehouse.findMany({ where: { isActive: true }, include: { zones: { include: { locations: true }, orderBy: { code: 'asc' } } }, orderBy: { code: 'asc' } })
   return json(warehouses)
 }
 
@@ -941,14 +941,27 @@ async function listAuditLogs(searchParams) {
 
 // ==================== META ====================
 async function getMeta() {
-  const [categories, uoms, warehouses, reasonCodes, suppliers] = await Promise.all([
-    prisma.category.findMany({ orderBy: { name: 'asc' } }),
-    prisma.uom.findMany({ orderBy: { code: 'asc' } }),
-    prisma.warehouse.findMany({ include: { zones: { include: { locations: { where: { isActive: true } }, orderBy: { code: 'asc' } } }, orderBy: { code: 'asc' } } }),
+  const [categories, uoms, warehouses, reasonCodes, suppliers, items, users] = await Promise.all([
+    prisma.category.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
+    prisma.uom.findMany({ where: { isActive: true }, orderBy: { code: 'asc' } }),
+    prisma.warehouse.findMany({
+      where: { isActive: true },
+      include: {
+        zones: {
+          include: {
+            locations: { where: { isActive: true } },
+            orderBy: { code: 'asc' },
+          },
+          orderBy: { code: 'asc' },
+        },
+      },
+    }),
     prisma.reasonCode.findMany({ where: { isActive: true }, orderBy: { code: 'asc' } }),
     prisma.supplier.findMany({ where: { isActive: true }, orderBy: { code: 'asc' } }),
+    prisma.item.findMany({ where: { isActive: true }, select: { id: true, sku: true, name: true, barcode: true, serialTracked: true, unitCost: true, uom: { select: { code: true } } }, orderBy: { sku: 'asc' } }),
+    prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true, role: true }, orderBy: { name: 'asc' } }),
   ])
-  return json({ categories, uoms, warehouses, reasonCodes, suppliers })
+  return json({ categories, uoms, warehouses, reasonCodes, suppliers, items, users })
 }
 
 // ==================== ROUTER ====================

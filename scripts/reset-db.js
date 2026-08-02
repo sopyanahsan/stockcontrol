@@ -1,124 +1,91 @@
-// Reset script — deletes ALL application data from the database.
+// Factory Reset — wipes ALL application data using PostgreSQL TRUNCATE.
 //
-// Usage: npm run reset-db
-//
-// - Uses Prisma Client
-// - Runs inside ONE prisma.$transaction()
-// - Dynamically detects tables (incl. optional tables such as SystemConfig,
-//   CycleCount, Warehouse, ...) so it never crashes if a model is missing
-// - Never modifies the schema, never runs migrate, never runs seed
+// - Reads information_schema.tables to discover every user table.
+// - Executes a single TRUNCATE TABLE ... RESTART IDENTITY CASCADE inside
+//   a prisma.$transaction so any failure rolls back.
+// - Verifies key tables reach 0; throws otherwise.
+// - Never drops the database, recreates schema, db push, migrate or seed.
 
 const { PrismaClient } = require('@prisma/client');
 
-// Prisma-internal metadata tables are NOT application data.
-const SKIP_TABLES = new Set(['_prisma_migrations']);
-
 const prisma = new PrismaClient();
 
-async function main() {
-    const tables = await listTables();
-    if (tables.length === 0) {
-        console.log('No application tables found. Nothing to reset.');
-        console.log('Database successfully reset.');
-        await prisma.$disconnect();
-        return;
-    }
+const VERIFY_TABLES = [
+  'User',
+  'Item',
+  'PickingOrder',
+  'PackingOrder',
+  'Shipment',
+  'StockTransfer',
+  'StockAdjustment',
+  'CycleCount',
+  'StockOpname',
+  'AuditLog',
+];
 
-    const order = await deletionOrder(tables);
+async function getTableNames() {
+  const rows = await prisma.$queryRawUnsafe(
+    "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE '_prisma_%' ORDER BY table_name"
+  );
+  return rows.map((r) => r.table_name);
+}
 
-    console.log('Resetting database...');
-    console.log(`Discovered ${order.length} table(s): ${order.join(', ')}`);
-
-    const queries = order.map(
-        (table) => prisma.$executeRawUnsafe(`DELETE FROM "${table}"`)
+function check(label, value) {
+  if (value !== 0) {
+    throw new Error(
+      `Factory Reset verification failed: ${label} = ${value} (expected 0)`
     );
-
-    const results = await prisma.$transaction(queries);
-
-    order.forEach((table, index) => {
-        console.log(`  deleted ${results[index]} row(s) from ${table}`);
-    });
-
-    console.log('Database successfully reset.');
+  }
+  console.log(`\u2713 ${label} = ${value}`);
 }
 
-async function listTables() {
-    const rows = await prisma.$queryRawUnsafe(`
-        SELECT table_name
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-          AND table_type = 'BASE TABLE'
-        ORDER BY table_name
-    `);
-    return rows
-        .map((row) => row.table_name)
-        .filter((table) => !SKIP_TABLES.has(table));
-}
+async function main() {
+  console.log('====================================');
+  console.log('StockControl WMS');
+  console.log('Factory Reset');
+  console.log('====================================');
 
-// Order tables so children are deleted before their parents (FK-safe).
-// Edges are built from pg_constraint so only tables that actually exist are
-// considered — missing/optional models are simply ignored.
-async function deletionOrder(tables) {
-    const tableSet = new Set(tables);
+  const tableNames = await getTableNames();
 
-    const fkRows = await prisma.$queryRawUnsafe(`
-        SELECT
-            child_rel.relname AS child,
-            parent_rel.relname AS parent
-        FROM pg_constraint
-        JOIN pg_class AS child_rel ON child_rel.oid = pg_constraint.conrelid
-        JOIN pg_class AS parent_rel ON parent_rel.oid = pg_constraint.confrelid
-        JOIN pg_namespace AS n ON n.oid = child_rel.relnamespace
-        WHERE pg_constraint.contype = 'f'
-          AND n.nspname = 'public'
-    `);
+  if (tableNames.length === 0) {
+    throw new Error('No tables found in public schema.');
+  }
 
-    // Edge child -> parent means "child must be deleted before parent".
-    const incoming = new Map();
-    tables.forEach((table) => incoming.set(table, 0));
+  const quoted = tableNames.map((t) => `"${t}"`).join(', ');
+  const sql = `TRUNCATE TABLE ${quoted} RESTART IDENTITY CASCADE`;
 
-    const children = new Map();
-    tables.forEach((table) => children.set(table, []));
+  console.log('');
+  console.log(`TRUNCATE ${tableNames.length} tables ...`);
 
-    fkRows.forEach(({ child, parent }) => {
-        if (child === parent) {
-            return;
-        }
-        if (!tableSet.has(child) || !tableSet.has(parent)) {
-            return;
-        }
-        children.get(child).push(parent);
-        incoming.set(parent, incoming.get(parent) + 1);
-    });
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(sql);
+  });
 
-    const queue = tables.filter((table) => incoming.get(table) === 0);
-    const order = [];
+  console.log('');
+  console.log('------------------------------------');
+  console.log('Verification');
 
-    while (queue.length > 0) {
-        const table = queue.shift();
-        order.push(table);
-        children.get(table).forEach((parent) => {
-            incoming.set(parent, incoming.get(parent) - 1);
-            if (incoming.get(parent) === 0) {
-                queue.push(parent);
-            }
-        });
-    }
+  await prisma.$transaction(async (tx) => {
+    check('User', await tx.user.count());
+    check('Item', await tx.item.count());
+    check('PickingOrder', await tx.pickingOrder.count());
+    check('PackingOrder', await tx.packingOrder.count());
+    check('Shipment', await tx.shipment.count());
+    check('StockTransfer', await tx.stockTransfer.count());
+    check('StockAdjustment', await tx.stockAdjustment.count());
+    check('CycleCount', await tx.cycleCount.count());
+    check('StockOpname', await tx.stockOpname.count());
+    check('AuditLog', await tx.auditLog.count());
+  });
 
-    // Any leftover tables form a dependency cycle (e.g. self-referencing FK).
-    // Append them in a deterministic order; row-level FK checks still apply.
-    tables.forEach((table) => {
-        if (!order.includes(table)) {
-            order.push(table);
-        }
-    });
-
-    return order;
+  console.log('------------------------------------');
+  console.log('Factory Reset completed.');
+  console.log('====================================');
 }
 
 main()
-    .catch((error) => {
-        console.error('Reset failed:', error);
-        process.exitCode = 1;
-    })
-    .finally(() => prisma.$disconnect());
+  .catch((error) => {
+    console.error(error.message || error);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());
