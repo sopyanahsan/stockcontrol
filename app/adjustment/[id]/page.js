@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
+import { formatCurrency } from '@/lib/currency'
 
 const fmt = (n) => new Intl.NumberFormat('en-US').format(n || 0)
 
@@ -399,7 +400,7 @@ const App = ({ params }) => {
                           className="h-7 w-24 text-xs tabular-nums text-right"
                         />
                       ) : (
-                        line.unitCost != null ? '$' + Number(line.unitCost).toFixed(4) : '-'
+                        line.unitCost != null ? formatCurrency(line.unitCost) : '-'
                       )}
                     </td>
                     {isDraft && (
@@ -502,11 +503,11 @@ const App = ({ params }) => {
                     <div className="px-4 py-2 space-y-1 text-[11px]">
                       <div className="flex gap-4 text-gray-600">
                         <span>Location: <span className="font-mono font-medium">{alloc.locationCode}</span></span>
-                        <span>Unit Cost: <span className="font-medium">${Number(alloc.unitCost || 0).toFixed(4)}</span></span>
+                        <span>Unit Cost: <span className="font-medium">{formatCurrency(alloc.unitCost || 0)}</span></span>
                         <span>→ New FIFO layer +{alloc.qty} units</span>
                       </div>
                       <div className="rounded border border-green-200 bg-green-50 px-3 py-2 text-green-700">
-                        New FIFO layer: {alloc.locationCode}, qty +{alloc.qty}, cost ${Number(alloc.unitCost || 0).toFixed(4)}
+                        New FIFO layer: {alloc.locationCode}, qty +{alloc.qty}, cost {formatCurrency(alloc.unitCost || 0)}
                       </div>
                     </div>
                   ) : (
@@ -539,7 +540,7 @@ const App = ({ params }) => {
                         <tfoot>
                           <tr className="border-t border-gray-200 font-medium">
                             <td colSpan={3} className="pt-1 text-right text-gray-500">Avg Cost:</td>
-                            <td className="pt-1 text-right tabular-nums">{alloc.avgUnitCost ? '$' + Number(alloc.avgUnitCost).toFixed(4) : '-'}</td>
+                            <td className="pt-1 text-right tabular-nums">{alloc.avgUnitCost ? formatCurrency(alloc.avgUnitCost) : '-'}</td>
                           </tr>
                         </tfoot>
                       </table>
@@ -576,7 +577,7 @@ const App = ({ params }) => {
                             {e.qty >= 0 ? '+' : ''}{e.qty}
                           </td>
                           <td className="py-1 text-right tabular-nums text-gray-500">
-                            {e.unitCost != null ? '$' + Number(e.unitCost).toFixed(4) : '-'}
+                            {e.unitCost != null ? formatCurrency(e.unitCost) : '-'}
                           </td>
                         </tr>
                       ))}

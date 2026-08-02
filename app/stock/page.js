@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { api } from '@/lib/api-client'
+import { formatCurrency } from '@/lib/currency'
 import AppShell from '@/components/app-shell'
 import DataTable from '@/components/data-table'
 import { Badge } from '@/components/ui/badge'
@@ -121,7 +122,7 @@ function CardTab() {
         header: 'Unit Cost',
         cell: ({ row }) => (
           <span className="tabular-nums text-xs text-gray-500">
-            {row.original.unitCost != null ? '$' + Number(row.original.unitCost).toFixed(4) : '-'}
+            {row.original.unitCost != null ? formatCurrency(row.original.unitCost) : '-'}
           </span>
         ),
       },
@@ -297,7 +298,7 @@ const App = () => {
         header: 'Value',
         accessorFn: (r) => r.qty * (r.item?.unitCost || 0),
         cell: ({ row }) => (
-          <span className="tabular-nums text-gray-600">${fmt(row.original.qty * (row.original.item?.unitCost || 0))}</span>
+          <span className="tabular-nums text-gray-600">{formatCurrency(row.original.qty * (row.original.item?.unitCost || 0))}</span>
         ),
       },
     ],

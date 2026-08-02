@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts'
 import { format, parseISO } from 'date-fns'
+import { formatCurrency } from '@/lib/currency'
 
 const fmt = (n) => new Intl.NumberFormat('en-US').format(n || 0)
 
@@ -80,7 +81,7 @@ function StockOnHandTab({ active }) {
         id: 'value', header: 'Value at Cost',
         accessorFn: (r) => r.totalValue || 0,
         cell: ({ row }) => (
-          <span className="tabular-nums text-gray-700">${fmt(Math.round(row.original.totalValue || 0))}</span>
+          <span className="tabular-nums text-gray-700">{formatCurrency(row.original.totalValue || 0)}</span>
         ),
       },
       {
@@ -107,7 +108,7 @@ function StockOnHandTab({ active }) {
     return [
       { label: 'Total SKUs', value: fmt(rows.length), sub: 'Items with stock' },
       { label: 'Total Qty', value: fmt(totalQty), sub: 'Units on hand' },
-      { label: 'Total Value', value: `$${fmt(Math.round(totalValue))}`, sub: 'At unit cost' },
+      { label: 'Total Value', value: formatCurrency(totalValue), sub: 'At unit cost' },
       { label: 'Below Reorder', value: fmt(belowReorder), sub: 'Need replenishment', accent: 'amber' },
     ]
   }, [data, rows])
@@ -239,7 +240,7 @@ function StockCardTab({ active }) {
         accessorKey: 'unitCost', header: 'Unit Cost',
         cell: ({ row }) => (
           <span className="tabular-nums text-xs text-gray-500">
-            {row.original.unitCost != null ? `$${Number(row.original.unitCost).toFixed(4)}` : '—'}
+            {row.original.unitCost != null ? formatCurrency(row.original.unitCost) : '—'}
           </span>
         ),
       },
@@ -382,7 +383,7 @@ function InventoryAgingTab({ active }) {
         accessorKey: 'unitCost', header: 'Unit Cost',
         cell: ({ row }) => (
           <span className="tabular-nums text-xs text-gray-500">
-            {row.original.unitCost != null ? `$${Number(row.original.unitCost).toFixed(4)}` : '—'}
+            {row.original.unitCost != null ? formatCurrency(row.original.unitCost) : '—'}
           </span>
         ),
       },
@@ -390,7 +391,7 @@ function InventoryAgingTab({ active }) {
         id: 'value', header: 'Value',
         accessorFn: (r) => r.totalValue || 0,
         cell: ({ row }) => (
-          <span className="tabular-nums text-gray-700">${fmt(Math.round(row.original.totalValue || 0))}</span>
+          <span className="tabular-nums text-gray-700">{formatCurrency(row.original.totalValue || 0)}</span>
         ),
       },
     ],
@@ -414,7 +415,7 @@ function InventoryAgingTab({ active }) {
     const staleItems = rows.filter((r) => (r.daysSinceActivity || 0) > 180).length
     return [
       { label: 'Total Items', value: fmt(totalItems), sub: 'Stock items tracked' },
-      { label: 'Total Value', value: `$${fmt(Math.round(totalValue))}`, sub: 'At unit cost' },
+      { label: 'Total Value', value: formatCurrency(totalValue), sub: 'At unit cost' },
       { label: 'Avg Age', value: `${avgAgeDays}d`, sub: 'Average days in stock' },
       { label: 'Stale Stock', value: fmt(staleItems), sub: '> 180 days', accent: 'amber' },
     ]
@@ -531,7 +532,7 @@ function FIFOAgingTab({ active }) {
         id: 'value', header: 'Value',
         accessorFn: (r) => r.totalValue || 0,
         cell: ({ row }) => (
-          <span className="tabular-nums text-gray-700">${fmt(Math.round(row.original.totalValue || 0))}</span>
+          <span className="tabular-nums text-gray-700">{formatCurrency(row.original.totalValue || 0)}</span>
         ),
       },
     ],
@@ -624,7 +625,7 @@ function DeadStockTab({ active }) {
         accessorFn: (r) => r.totalValue || 0,
         cell: ({ row }) => (
           <span className="tabular-nums font-medium text-red-600">
-            ${fmt(Math.round(row.original.totalValue || 0))}
+            {formatCurrency(row.original.totalValue || 0)}
           </span>
         ),
       },
@@ -643,7 +644,7 @@ function DeadStockTab({ active }) {
     const topCategory = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0]?.[0] || '—'
     return [
       { label: 'Dead Stock Items', value: fmt(rows.length), sub: 'No movement > threshold', accent: 'amber' },
-      { label: 'Tied-up Value', value: `$${fmt(Math.round(totalValue))}`, sub: 'Capital locked in dead stock' },
+      { label: 'Tied-up Value', value: formatCurrency(totalValue), sub: 'Capital locked in dead stock' },
       { label: 'Top Category', value: topCategory, sub: 'Most dead stock' },
       { label: 'Threshold', value: `${threshold}d`, sub: 'Idle period' },
     ]

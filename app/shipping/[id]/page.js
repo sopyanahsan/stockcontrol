@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
+import { formatCurrency } from '@/lib/currency'
 
 const SHIPMENT_STATUS_META = {
   QUEUE:       { label: 'Queue',        class: 'bg-blue-50 text-blue-700 border-blue-200' },
@@ -104,7 +105,7 @@ function PreviewDialog({ shipmentId, onClose }) {
                               {item.fifoLayers.length} layer(s)
                             </td>
                             <td className="px-2 py-1 text-right tabular-nums">
-                              {item.avgUnitCost > 0 ? '$' + item.avgUnitCost.toFixed(2) : '—'}
+                              {item.avgUnitCost > 0 ? formatCurrency(item.avgUnitCost) : '—'}
                             </td>
                           </tr>
                         ))}
@@ -129,7 +130,7 @@ function PreviewDialog({ shipmentId, onClose }) {
                         <td className="px-3 py-1.5 font-mono">{entry.sku}</td>
                         <td className="px-3 py-1.5 text-right tabular-nums text-red-600">{entry.qty}</td>
                         <td className="px-3 py-1.5 text-right tabular-nums">
-                          {entry.unitCost > 0 ? '$' + entry.unitCost.toFixed(2) : '—'}
+                          {entry.unitCost > 0 ? formatCurrency(entry.unitCost) : '—'}
                         </td>
                       </tr>
                     ))}

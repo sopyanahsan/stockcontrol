@@ -262,7 +262,7 @@ const App = () => {
                     className="h-8 text-xs tabular-nums text-right" />
 
                   <div className="flex items-center gap-1">
-                    <Input type="number" min="0" step="0.0001" placeholder="$0.00" value={line.unitCost}
+                    <Input type="number" min="0" step="0.0001" placeholder="0.00" value={line.unitCost}
                       onChange={(e) => updateLine(i, 'unitCost', e.target.value)}
                       className="h-8 text-xs tabular-nums text-right" />
                     {lines.length > 1 && (

@@ -13,9 +13,9 @@ import {
   AreaChart, Area, Legend,
 } from 'recharts'
 import { formatDistanceToNow } from 'date-fns'
+import { formatCurrency } from '@/lib/currency'
 
 const fmt = (n) => new Intl.NumberFormat('en-US').format(Math.round(n || 0))
-const fmtMoney = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n || 0)
 
 const ACTION_COLORS = {
   CREATE: 'bg-green-100 text-green-700',
@@ -84,7 +84,7 @@ const App = () => {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard icon={Package} label="Active SKUs" value={fmt(data?.stats?.totalItems)} sub={`${fmt(data?.stats?.totalLocations)} active locations`} />
             <StatCard icon={Boxes} label="Stock on Hand" value={fmt(data?.stats?.totalUnits)} sub="units across all locations" accent="text-indigo-600 bg-indigo-50" />
-            <StatCard icon={DollarSign} label="Inventory Value" value={fmtMoney(data?.stats?.totalValue)} sub="at standard cost" accent="text-green-600 bg-green-50" />
+            <StatCard icon={DollarSign} label="Inventory Value" value={formatCurrency(data?.stats?.totalValue)} sub="at standard cost" accent="text-green-600 bg-green-50" />
             <StatCard icon={AlertTriangle} label="Low Stock Alerts" value={fmt(data?.stats?.lowStockCount)} sub={`${fmt(data?.stats?.todayMovements)} movements today`} accent="text-amber-600 bg-amber-50" />
           </div>
 

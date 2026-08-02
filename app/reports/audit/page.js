@@ -13,6 +13,7 @@ import { ChartCard } from '@/components/reports/ChartCard'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { formatCurrency } from '@/lib/currency'
 import { format, parseISO } from 'date-fns'
 
 const fmt = (n) => new Intl.NumberFormat('en-US').format(n || 0)
@@ -401,7 +402,7 @@ function InventoryHistoryTab({ active }) {
         accessorKey: 'unitCost', header: 'Unit Cost',
         cell: ({ row }) => (
           <span className="tabular-nums text-xs text-gray-500">
-            {row.original.unitCost != null ? `$${Number(row.original.unitCost).toFixed(4)}` : '—'}
+            {row.original.unitCost != null ? formatCurrency(row.original.unitCost) : '—'}
           </span>
         ),
       },

@@ -25,6 +25,7 @@ import BarcodeInput, { createScanSession } from '@/components/barcode-input'
 import { ArrowLeft, Plus, Trash2, Loader2, Play, Send, Ban, ChevronRight, Barcode, PackageCheck } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
+import { formatCurrency } from '@/lib/currency'
 
 const STATUS_META = {
   DRAFT:           { label: 'Draft',            class: 'bg-gray-100 text-gray-700' },
@@ -411,7 +412,7 @@ const App = ({ params }) => {
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums">{l.expectedQty} {l.item?.uom?.code}</td>
                       <td className="px-4 py-2 text-right tabular-nums font-medium">{l.receivedQty} {l.item?.uom?.code}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-gray-500">${l.unitCost}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-gray-500">{formatCurrency(l.unitCost)}</td>
                       <td className="px-4 py-2 text-xs text-gray-500">{l.batchNo || '-'}</td>
                       <td className="px-4 py-2 text-xs">
                         {l.item?.serialTracked ? (

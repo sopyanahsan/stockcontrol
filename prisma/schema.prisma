@@ -8,38 +8,38 @@ datasource db {
 }
 
 model User {
-  id                                    String        @id @default(uuid())
-  email                                 String        @unique
+  id                                    String            @id @default(uuid())
+  email                                 String            @unique
   passwordHash                          String
   name                                  String
   role                                  Role
-  isActive                              Boolean       @default(true)
-  createdAt                             DateTime      @default(now())
-  updatedAt                             DateTime      @updatedAt
+  isActive                              Boolean           @default(true)
+  createdAt                             DateTime          @default(now())
+  updatedAt                             DateTime          @updatedAt
   auditLogs                             AuditLog[]
-  Receiving_Receiving_createdByIdToUser Receiving[]   @relation("Receiving_createdByIdToUser")
-  Receiving_Receiving_postedByIdToUser  Receiving[]   @relation("Receiving_postedByIdToUser")
+  approvedCycleCounts                   CycleCount[]      @relation("CycleCountApprover")
+  assignedCycleCounts                   CycleCount[]      @relation("CycleCountAssignedTo")
+  cycleCounts                           CycleCount[]      @relation("CycleCountCreator")
+  packingOrdersAssigned                 PackingOrder[]    @relation("PackingAssignedTo")
+  packingOrdersCreated                  PackingOrder[]    @relation("PackingCreatedBy")
+  Receiving_Receiving_createdByIdToUser Receiving[]       @relation("Receiving_createdByIdToUser")
+  Receiving_Receiving_postedByIdToUser  Receiving[]       @relation("Receiving_postedByIdToUser")
+  shipmentsAssigned                     Shipment[]        @relation("ShipmentAssignedTo")
+  shipmentsCreated                      Shipment[]        @relation("ShipmentCreatedBy")
+  shipmentPackagesVerified              ShipmentPackage[] @relation("ShipmentPackageVerifiedBy")
+  approvedAdjustments                   StockAdjustment[] @relation("AdjustmentApprover")
+  stockAdjustments                      StockAdjustment[] @relation("AdjustmentCreator")
   ledgerEntries                         StockLedger[]
-  stockAdjustments                     StockAdjustment[] @relation("AdjustmentCreator")
-  approvedAdjustments                  StockAdjustment[] @relation("AdjustmentApprover")
-  cycleCounts                          CycleCount[]  @relation("CycleCountCreator")
-  assignedCycleCounts                  CycleCount[]  @relation("CycleCountAssignedTo")
-  approvedCycleCounts                  CycleCount[]  @relation("CycleCountApprover")
-  packingOrdersCreated                PackingOrder[] @relation("PackingCreatedBy")
-  packingOrdersAssigned               PackingOrder[] @relation("PackingAssignedTo")
-  shipmentsCreated                   Shipment[]    @relation("ShipmentCreatedBy")
-  shipmentsAssigned                  Shipment[]    @relation("ShipmentAssignedTo")
-  shipmentPackagesVerified            ShipmentPackage[] @relation("ShipmentPackageVerifiedBy")
-  stockOpnamesCreated                StockOpname[] @relation("StockOpnameCreator")
-  approvedStockOpnames              StockOpname[] @relation("StockOpnameApprover")
+  approvedStockOpnames                  StockOpname[]     @relation("StockOpnameApprover")
+  stockOpnamesCreated                   StockOpname[]     @relation("StockOpnameCreator")
 }
 
 model Category {
   id          String   @id @default(uuid())
   name        String   @unique
   description String?
-  isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
+  isActive    Boolean  @default(true)
   updatedAt   DateTime @updatedAt
   items       Item[]
 }
@@ -48,41 +48,41 @@ model Uom {
   id        String   @id @default(uuid())
   code      String   @unique
   name      String
-  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+  isActive  Boolean  @default(true)
   updatedAt DateTime @updatedAt
   items     Item[]
 }
 
 model Item {
-  id             String          @id @default(uuid())
-  sku            String          @unique
-  name           String
-  description    String?
-  barcode        String?
-  categoryId     String
-  uomId          String
-  minStock       Float           @default(0)
-  maxStock       Float           @default(0)
-  reorderPoint   Float           @default(0)
-  unitCost       Float           @default(0)
-  imageUrl       String?
-  isActive       Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  serialTracked  Boolean         @default(false)
-  fifoLayers     FifoLayer[]
-  category       Category        @relation(fields: [categoryId], references: [id])
-  uom            Uom             @relation(fields: [uomId], references: [id])
-  putawayTasks   PutawayTask[]
-  receivingLines ReceivingLine[]
-  serials        SerialNumber[]
-  ledgerEntries  StockLedger[]
+  id                   String                @id @default(uuid())
+  sku                  String                @unique
+  name                 String
+  description          String?
+  barcode              String?
+  categoryId           String
+  uomId                String
+  minStock             Float                 @default(0)
+  maxStock             Float                 @default(0)
+  reorderPoint         Float                 @default(0)
+  unitCost             Float                 @default(0)
+  imageUrl             String?
+  isActive             Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  serialTracked        Boolean               @default(false)
+  cycleCountLines      CycleCountLine[]
+  fifoLayers           FifoLayer[]
+  category             Category              @relation(fields: [categoryId], references: [id])
+  uom                  Uom                   @relation(fields: [uomId], references: [id])
+  packageItems         PackageItem[]
+  pickingOrderLines    PickingOrderLine[]
+  putawayTasks         PutawayTask[]
+  receivingLines       ReceivingLine[]
+  serials              SerialNumber[]
   stockAdjustmentLines StockAdjustmentLine[]
-  cycleCountLines    CycleCountLine[]
-  pickingOrderLines  PickingOrderLine[]
-  packageItems       PackageItem[]
-  stockOpnameLines   StockOpnameLine[]
+  ledgerEntries        StockLedger[]
+  stockOpnameLines     StockOpnameLine[]
 
   @@index([sku])
   @@index([name])
@@ -111,34 +111,34 @@ model Zone {
 }
 
 model Location {
-  id                String         @id @default(uuid())
-  zoneId            String
-  code              String         @unique
-  name              String         @default("")
-  type              LocationType   @default(STORAGE)
-  isActive          Boolean        @default(true)
-  fifoLayers        FifoLayer[]
-  zone              Zone           @relation(fields: [zoneId], references: [id])
-  putawayTasksFrom  PutawayTask[]  @relation("PutawayFrom")
-  putawayTasksTo    PutawayTask[]  @relation("PutawayTo")
-  receivingsStaging Receiving[]    @relation("ReceivingStaging")
-  serials           SerialNumber[]
-  ledgerEntries     StockLedger[]
+  id                   String                @id @default(uuid())
+  zoneId               String
+  code                 String                @unique
+  type                 LocationType          @default(STORAGE)
+  isActive             Boolean               @default(true)
+  name                 String                @default("")
+  cycleCountLines      CycleCountLine[]
+  fifoLayers           FifoLayer[]
+  zone                 Zone                  @relation(fields: [zoneId], references: [id])
+  pickingTasks         PickingTask[]
+  putawayTasksFrom     PutawayTask[]         @relation("PutawayFrom")
+  putawayTasksTo       PutawayTask[]         @relation("PutawayTo")
+  receivingsStaging    Receiving[]           @relation("ReceivingStaging")
+  serials              SerialNumber[]
   stockAdjustmentLines StockAdjustmentLine[]
-  cycleCountLines    CycleCountLine[]
-  pickingTasks       PickingTask[]
-  stockOpnameLines   StockOpnameLine[]
+  ledgerEntries        StockLedger[]
+  stockOpnameLines     StockOpnameLine[]
 }
 
 model ReasonCode {
-  id            String        @id @default(uuid())
-  code          String        @unique
-  description   String
-  type          ReasonType
-  isActive      Boolean       @default(true)
-  ledgerEntries StockLedger[]
+  id                   String                @id @default(uuid())
+  code                 String                @unique
+  description          String
+  type                 ReasonType
+  isActive             Boolean               @default(true)
+  stockAdjustments     StockAdjustment[]
   stockAdjustmentLines StockAdjustmentLine[]
-  stockAdjustments StockAdjustment[]
+  ledgerEntries        StockLedger[]
 }
 
 model StockLedger {
@@ -204,11 +204,7 @@ model Receiving {
   id                               String          @id @default(uuid())
   grnNumber                        String          @unique
   supplier                         String?
-  supplierId                       String?
   refDocument                      String?
-  invoiceNumber                    String?
-  vehicleNumber                    String?
-  driverName                       String?
   remarks                          String?
   createdById                      String
   postedAt                         DateTime?
@@ -221,11 +217,15 @@ model Receiving {
   warehouseId                      String
   status                           ReceivingStatus @default(DRAFT)
   startedAt                        DateTime?
+  driverName                       String?
+  invoiceNumber                    String?
+  supplierId                       String?
+  vehicleNumber                    String?
   User_Receiving_createdByIdToUser User            @relation("Receiving_createdByIdToUser", fields: [createdById], references: [id])
   User_Receiving_postedByIdToUser  User?           @relation("Receiving_postedByIdToUser", fields: [postedById], references: [id])
   stagingLocation                  Location        @relation("ReceivingStaging", fields: [stagingLocationId], references: [id])
-  warehouse                        Warehouse       @relation(fields: [warehouseId], references: [id])
   supplierRel                      Supplier?       @relation(fields: [supplierId], references: [id])
+  warehouse                        Warehouse       @relation(fields: [warehouseId], references: [id])
   lines                            ReceivingLine[]
 
   @@index([status])
@@ -235,24 +235,24 @@ model Receiving {
 }
 
 model Supplier {
-  id            String      @id @default(uuid())
-  code          String      @unique
-  name          String
-  picName       String
-  phone         String
-  email         String?
-  address       String?
-  city          String?
-  province      String?
-  postalCode    String?
-  leadTimeDays  Int         @default(0)
-  taxNumber     String?
-  website       String?
-  notes         String?
-  isActive      Boolean     @default(true)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  receivings    Receiving[]
+  id           String      @id @default(uuid())
+  code         String      @unique
+  name         String
+  picName      String
+  phone        String
+  email        String?
+  address      String?
+  city         String?
+  province     String?
+  postalCode   String?
+  leadTimeDays Int         @default(0)
+  taxNumber    String?
+  website      String?
+  notes        String?
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  receivings   Receiving[]
 
   @@index([name])
   @@index([city])
@@ -378,30 +378,30 @@ model StockAdjustment {
   postedAt         DateTime?
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
-  lines            StockAdjustmentLine[]
-  createdBy        User                  @relation("AdjustmentCreator", fields: [createdById], references: [id])
   approvedBy       User?                 @relation("AdjustmentApprover", fields: [approvedById], references: [id])
+  createdBy        User                  @relation("AdjustmentCreator", fields: [createdById], references: [id])
   reasonCode       ReasonCode?           @relation(fields: [reasonCodeId], references: [id])
+  lines            StockAdjustmentLine[]
 
   @@index([status])
   @@index([createdAt])
 }
 
 model StockAdjustmentLine {
-  id            String          @id @default(uuid())
-  adjustmentId  String
-  itemId        String
-  locationId    String
-  qty           Float           @default(0)
-  systemQty     Float           @default(0)
-  countedQty    Float           @default(0)
-  diffQty       Float           @default(0)
-  reasonCodeId  String?
-  remarks       String?
-  adjustment    StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
-  item          Item            @relation(fields: [itemId], references: [id])
-  location      Location        @relation(fields: [locationId], references: [id])
-  reasonCode    ReasonCode?     @relation(fields: [reasonCodeId], references: [id])
+  id           String          @id @default(uuid())
+  adjustmentId String
+  itemId       String
+  locationId   String
+  systemQty    Float           @default(0)
+  countedQty   Float           @default(0)
+  diffQty      Float           @default(0)
+  qty          Float           @default(0)
+  reasonCodeId String?
+  remarks      String?
+  adjustment   StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  item         Item            @relation(fields: [itemId], references: [id])
+  location     Location        @relation(fields: [locationId], references: [id])
+  reasonCode   ReasonCode?     @relation(fields: [reasonCodeId], references: [id])
 
   @@index([adjustmentId])
   @@index([itemId])
@@ -413,18 +413,18 @@ model CycleCount {
   countNumber  String           @unique
   status       DocStatus        @default(DRAFT)
   locationId   String?
-  assignedToId String?
   remarks      String?
   createdById  String
-  approvedById String?
   postedAt     DateTime?
-  approvedAt   DateTime?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
-  lines        CycleCountLine[]
+  approvedAt   DateTime?
+  approvedById String?
+  assignedToId String?
+  approvedBy   User?            @relation("CycleCountApprover", fields: [approvedById], references: [id])
+  assignedTo   User?            @relation("CycleCountAssignedTo", fields: [assignedToId], references: [id])
   createdBy    User             @relation("CycleCountCreator", fields: [createdById], references: [id])
-  assignedTo   User?           @relation("CycleCountAssignedTo", fields: [assignedToId], references: [id])
-  approvedBy   User?           @relation("CycleCountApprover", fields: [approvedById], references: [id])
+  lines        CycleCountLine[]
 
   @@index([status])
   @@index([locationId])
@@ -432,20 +432,20 @@ model CycleCount {
 }
 
 model PickingOrder {
-  id              String             @id @default(uuid())
-  pickingNumber   String             @unique
-  status          PickingOrderStatus @default(DRAFT)
-  priority        PickingPriority    @default(NORMAL)
-  warehouseId     String?
-  assignedToId    String?
-  createdById     String
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  startedAt       DateTime?
-  completedAt     DateTime?
-  notes           String?
-  lines           PickingOrderLine[]
-  packingOrder    PackingOrder?
+  id            String             @id @default(uuid())
+  pickingNumber String             @unique
+  status        PickingOrderStatus @default(DRAFT)
+  priority      PickingPriority    @default(NORMAL)
+  warehouseId   String?
+  assignedToId  String?
+  createdById   String
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  startedAt     DateTime?
+  completedAt   DateTime?
+  notes         String?
+  packingOrder  PackingOrder?
+  lines         PickingOrderLine[]
 
   @@index([status])
   @@index([warehouseId])
@@ -457,11 +457,11 @@ model PickingOrderLine {
   pickingOrderId String
   itemId         String
   qtyOrdered     Float
-  qtyPicked      Float            @default(0)
+  qtyPicked      Float             @default(0)
   status         PickingTaskStatus @default(OPEN)
   remarks        String?
-  pickingOrder   PickingOrder     @relation(fields: [pickingOrderId], references: [id], onDelete: Cascade)
-  item           Item             @relation(fields: [itemId], references: [id])
+  item           Item              @relation(fields: [itemId], references: [id])
+  pickingOrder   PickingOrder      @relation(fields: [pickingOrderId], references: [id], onDelete: Cascade)
   tasks          PickingTask[]
 
   @@index([pickingOrderId])
@@ -469,23 +469,22 @@ model PickingOrderLine {
 }
 
 model PickingTask {
-  id             String            @id @default(uuid())
-  pickingLineId  String
-  locationId     String
-  fifoLayerId    String?
-  sequence       Int               @default(0)
-  qty            Float
-  qtyPicked      Float            @default(0)
-  status         PickingTaskStatus @default(OPEN)
-  pickedById     String?
-  pickedAt       DateTime?
-  startedAt      DateTime?
-  createdAt      DateTime          @default(now())
-  pickingLine    PickingOrderLine  @relation(fields: [pickingLineId], references: [id], onDelete: Cascade)
-  location       Location          @relation(fields: [locationId], references: [id])
-
-  serials           PickingTaskSerial[]
+  id                 String              @id @default(uuid())
+  pickingLineId      String
+  locationId         String
+  fifoLayerId        String?
+  sequence           Int                 @default(0)
+  qty                Float
+  qtyPicked          Float               @default(0)
+  status             PickingTaskStatus   @default(OPEN)
+  pickedById         String?
+  pickedAt           DateTime?
+  startedAt          DateTime?
+  createdAt          DateTime            @default(now())
   packageAllocations PackageAllocation[]
+  location           Location            @relation(fields: [locationId], references: [id])
+  pickingLine        PickingOrderLine    @relation(fields: [pickingLineId], references: [id], onDelete: Cascade)
+  serials            PickingTaskSerial[]
 
   @@index([pickingLineId])
   @@index([status])
@@ -493,48 +492,36 @@ model PickingTask {
 }
 
 model PickingTaskSerial {
-  id            String     @id @default(uuid())
+  id            String      @id @default(uuid())
   pickingTaskId String
   serialNo      String
-  pickedAt      DateTime  @default(now())
+  pickedAt      DateTime    @default(now())
   packageId     String?
-  pickingTask   PickingTask @relation(fields: [pickingTaskId], references: [id], onDelete: Cascade)
   package       Package?    @relation(fields: [packageId], references: [id])
+  pickingTask   PickingTask @relation(fields: [pickingTaskId], references: [id], onDelete: Cascade)
 
   @@unique([pickingTaskId, serialNo])
   @@index([pickingTaskId])
   @@index([packageId])
 }
 
-enum PackingOrderStatus {
-  QUEUE
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-}
-
-enum PackageStatus {
-  OPEN
-  CLOSED
-}
-
 model PackingOrder {
-  id              String             @id @default(uuid())
-  packingNumber   String             @unique
-  status          PackingOrderStatus @default(QUEUE)
-  pickingOrderId  String?            @unique
-  warehouseId     String?
-  assignedToId    String?
-  createdById     String
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  startedAt       DateTime?
-  completedAt     DateTime?
-  pickingOrder    PickingOrder?      @relation(fields: [pickingOrderId], references: [id])
-  packages        Package[]
-  assignedTo      User?              @relation("PackingAssignedTo", fields: [assignedToId], references: [id])
-  createdBy       User?              @relation("PackingCreatedBy", fields: [createdById], references: [id])
-  shipments       Shipment[]
+  id             String             @id @default(uuid())
+  packingNumber  String             @unique
+  status         PackingOrderStatus @default(QUEUE)
+  pickingOrderId String?            @unique
+  warehouseId    String?
+  assignedToId   String?
+  createdById    String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  startedAt      DateTime?
+  completedAt    DateTime?
+  packages       Package[]
+  assignedTo     User?              @relation("PackingAssignedTo", fields: [assignedToId], references: [id])
+  createdBy      User               @relation("PackingCreatedBy", fields: [createdById], references: [id])
+  pickingOrder   PickingOrder?      @relation(fields: [pickingOrderId], references: [id])
+  shipments      Shipment?
 
   @@index([status])
   @@index([pickingOrderId])
@@ -542,33 +529,33 @@ model PackingOrder {
 }
 
 model Package {
-  id            String        @id @default(uuid())
-  packageNumber String        @unique
+  id             String              @id @default(uuid())
+  packageNumber  String              @unique
   packingOrderId String
-  status        PackageStatus @default(OPEN)
-  weight        Float?
-  length        Float?
-  width         Float?
-  height        Float?
-  volume        Float?
-  createdAt     DateTime      @default(now())
-  closedAt      DateTime?
-  packingOrder  PackingOrder  @relation(fields: [packingOrderId], references: [id], onDelete: Cascade)
-  items         PackageItem[]
-  serials       PickingTaskSerial[]
+  status         PackageStatus       @default(OPEN)
+  weight         Float?
+  length         Float?
+  width          Float?
+  height         Float?
+  volume         Float?
+  createdAt      DateTime            @default(now())
+  closedAt       DateTime?
+  packingOrder   PackingOrder        @relation(fields: [packingOrderId], references: [id], onDelete: Cascade)
+  items          PackageItem[]
+  serials        PickingTaskSerial[]
 
   @@index([packingOrderId])
   @@index([status])
 }
 
 model PackageItem {
-  id         String        @id @default(uuid())
-  packageId  String
-  itemId     String
-  qty        Float
-  package    Package       @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  item       Item          @relation(fields: [itemId], references: [id])
+  id          String              @id @default(uuid())
+  packageId   String
+  itemId      String
+  qty         Float
   allocations PackageAllocation[]
+  item        Item                @relation(fields: [itemId], references: [id])
+  package     Package             @relation(fields: [packageId], references: [id], onDelete: Cascade)
 
   @@unique([packageId, itemId])
   @@index([packageId])
@@ -576,12 +563,12 @@ model PackageItem {
 }
 
 model PackageAllocation {
-  id            String       @id @default(uuid())
+  id            String      @id @default(uuid())
   packageItemId String
   pickingTaskId String
-  qtyPacked    Float
-  packageItem  PackageItem  @relation(fields: [packageItemId], references: [id], onDelete: Cascade)
-  pickingTask  PickingTask  @relation(fields: [pickingTaskId], references: [id], onDelete: Cascade)
+  qtyPacked     Float
+  packageItem   PackageItem @relation(fields: [packageItemId], references: [id], onDelete: Cascade)
+  pickingTask   PickingTask @relation(fields: [pickingTaskId], references: [id], onDelete: Cascade)
 
   @@unique([packageItemId, pickingTaskId])
   @@index([pickingTaskId])
@@ -608,19 +595,19 @@ model StockOpname {
   id           String            @id @default(uuid())
   opnameNumber String            @unique
   status       DocStatus         @default(DRAFT)
-  opnameDate   DateTime          @default(now())
   remarks      String?
   createdById  String
   approvedById String?
-  approvedAt   DateTime?
   postedAt     DateTime?
-  startedAt    DateTime?
-  completedAt  DateTime?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
-  lines        StockOpnameLine[]
-  createdBy    User              @relation("StockOpnameCreator", fields: [createdById], references: [id])
+  approvedAt   DateTime?
+  completedAt  DateTime?
+  opnameDate   DateTime          @default(now())
+  startedAt    DateTime?
   approvedBy   User?             @relation("StockOpnameApprover", fields: [approvedById], references: [id])
+  createdBy    User              @relation("StockOpnameCreator", fields: [createdById], references: [id])
+  lines        StockOpnameLine[]
 
   @@index([status])
   @@index([createdById])
@@ -628,18 +615,18 @@ model StockOpname {
 }
 
 model StockOpnameLine {
-  id            String      @id @default(uuid())
-  stockOpnameId String
-  itemId        String
-  locationId    String
-  systemQty     Float       @default(0)
-  countedQty    Float       @default(0)
-  diffQty       Float       @default(0)
+  id             String      @id @default(uuid())
+  stockOpnameId  String
+  itemId         String
+  locationId     String
+  systemQty      Float       @default(0)
+  countedQty     Float       @default(0)
+  diffQty        Float       @default(0)
+  countedAt      DateTime?
   varianceReason String?
-  countedAt     DateTime?
-  stockOpname   StockOpname @relation(fields: [stockOpnameId], references: [id], onDelete: Cascade)
-  item          Item        @relation(fields: [itemId], references: [id])
-  location      Location    @relation(fields: [locationId], references: [id])
+  item           Item        @relation(fields: [itemId], references: [id])
+  location       Location    @relation(fields: [locationId], references: [id])
+  stockOpname    StockOpname @relation(fields: [stockOpnameId], references: [id], onDelete: Cascade)
 
   @@index([stockOpnameId])
   @@index([itemId])
@@ -647,40 +634,39 @@ model StockOpnameLine {
 }
 
 model Shipment {
-  id               String              @id @default(uuid())
-  shipmentNumber   String             @unique
-  status           ShipmentStatus   @default(QUEUE)
-  warehouseId      String?
-  packingOrderId   String?           @unique
-  createdById      String
-  assignedToId     String?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  startedAt        DateTime?
-  completedAt      DateTime?
-  shippedAt        DateTime?
-  packages         ShipmentPackage[]
-  createdBy        User             @relation("ShipmentCreatedBy", fields: [createdById], references: [id])
-  assignedTo       User?            @relation("ShipmentAssignedTo", fields: [assignedToId], references: [id])
-  packingOrder     PackingOrder?    @relation(fields: [packingOrderId], references: [id])
+  id             String            @id @default(uuid())
+  shipmentNumber String            @unique
+  status         ShipmentStatus    @default(QUEUE)
+  warehouseId    String?
+  packingOrderId String?           @unique
+  createdById    String
+  assignedToId   String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  startedAt      DateTime?
+  completedAt    DateTime?
+  shippedAt      DateTime?
+  assignedTo     User?             @relation("ShipmentAssignedTo", fields: [assignedToId], references: [id])
+  createdBy      User              @relation("ShipmentCreatedBy", fields: [createdById], references: [id])
+  packingOrder   PackingOrder?     @relation(fields: [packingOrderId], references: [id])
+  packages       ShipmentPackage[]
 
   @@index([status])
   @@index([createdAt])
 }
 
 model ShipmentPackage {
-  id            String                   @id @default(uuid())
-  shipmentId    String
-  packageId     String
-  status        ShipmentPackageStatus  @default(PENDING)
-  scannedAt     DateTime               @default(now())
-  verifiedAt    DateTime?
-  verifiedById  String?
-  shipment      Shipment             @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  verifiedBy    User?                 @relation("ShipmentPackageVerifiedBy", fields: [verifiedById], references: [id])
+  id           String                @id @default(uuid())
+  shipmentId   String
+  packageId    String                @unique
+  status       ShipmentPackageStatus @default(PENDING)
+  scannedAt    DateTime              @default(now())
+  verifiedAt   DateTime?
+  verifiedById String?
+  shipment     Shipment              @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  verifiedBy   User?                 @relation("ShipmentPackageVerifiedBy", fields: [verifiedById], references: [id])
 
   @@unique([shipmentId, packageId])
-  @@unique([packageId])
   @@index([shipmentId])
   @@index([packageId])
 }
@@ -691,6 +677,18 @@ model SystemConfig {
   value     Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum PackingOrderStatus {
+  QUEUE
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PackageStatus {
+  OPEN
+  CLOSED
 }
 
 enum ShipmentStatus {

@@ -8,6 +8,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
+import { formatCurrency } from '@/lib/currency'
 import { api } from '@/lib/api-client'
 import AppShell from '@/components/app-shell'
 import DataTable from '@/components/data-table'
@@ -170,7 +171,7 @@ const App = () => {
         },
       },
       { accessorKey: 'reorderPoint', header: 'Reorder Pt', cell: ({ row }) => <span className="tabular-nums text-gray-500">{fmt(row.original.reorderPoint)}</span> },
-      { accessorKey: 'unitCost', header: 'Unit Cost', cell: ({ row }) => <span className="tabular-nums">${row.original.unitCost}</span> },
+      { accessorKey: 'unitCost', header: 'Unit Cost', cell: ({ row }) => <span className="tabular-nums">{formatCurrency(row.original.unitCost)}</span> },
       {
         accessorKey: 'isActive',
         header: 'Status',
@@ -323,7 +324,7 @@ const App = () => {
                 <Input type="number" step="any" {...form.register('maxStock')} className="h-8 text-xs" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Unit Cost ($)</Label>
+                <Label className="text-xs">Unit Cost (Rp)</Label>
                 <Input type="number" step="any" {...form.register('unitCost')} className="h-8 text-xs" />
               </div>
             </div>
