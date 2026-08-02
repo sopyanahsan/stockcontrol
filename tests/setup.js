@@ -93,6 +93,10 @@ afterEach(async () => {
     // 5c. Receiving after ReceivingLine (Receiving carries Location + Warehouse RESTRICT FKs)
     await tx.$executeRaw`DELETE FROM "Receiving" WHERE "warehouseId" IN (SELECT id FROM "Warehouse" WHERE "code" = ${WH_CODE})`
 
+    // 5d. Suppliers created by seed users / with seed key in code or name.
+    //     Receiving rows referencing them were removed above, so this can't trip the FK.
+    await tx.$executeRaw`DELETE FROM "Supplier" WHERE "name" LIKE ${'%' + SEED_KEY + '%'} OR "code" LIKE ${'%' + SEED_KEY + '%'}`
+
     // 6. Infrastructure (Location → Zone → Warehouse)
     await tx.$executeRaw`DELETE FROM "Location" WHERE "zoneId" IN (SELECT id FROM "Zone" WHERE "warehouseId" IN (SELECT id FROM "Warehouse" WHERE "code" = ${WH_CODE}))`
     await tx.$executeRaw`DELETE FROM "Zone" WHERE "warehouseId" IN (SELECT id FROM "Warehouse" WHERE "code" = ${WH_CODE})`
@@ -109,6 +113,7 @@ afterEach(async () => {
     // 8. Master data
     await tx.$executeRaw`DELETE FROM "ReasonCode" WHERE "code" LIKE ${'%' + SEED_KEY + '%'}`
     await tx.$executeRaw`DELETE FROM "DocumentSequence" WHERE "warehouseCode" = ${WH_CODE}`
+    await tx.$executeRaw`DELETE FROM "DocumentSequence" WHERE "prefix" = 'SUP' AND "warehouseCode" = 'GLOBAL' AND "yearMonth" = 'ALL'`
     await tx.$executeRaw`DELETE FROM "Uom" WHERE "code" LIKE ${'%' + SEED_KEY + '%'}`
     await tx.$executeRaw`DELETE FROM "Category" WHERE "name" LIKE ${'%' + SEED_KEY + '%'}`
   })

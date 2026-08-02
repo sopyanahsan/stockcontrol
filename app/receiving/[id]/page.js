@@ -82,6 +82,27 @@ const App = ({ params }) => {
   const isEditable = data?.status === 'DRAFT'
   const isReceiving = data?.status === 'RECEIVING'
 
+  // ---------- Header details (draft edit) ----------
+  const [detailsForm, setDetailsForm] = useState(null)
+  const [openDetails, setOpenDetails] = useState(false)
+  const detailsForEdit = detailsForm ?? {
+    supplierId: data?.supplierRel?.id || '',
+    supplier: data?.supplier || '',
+    refDocument: data?.refDocument || '',
+    invoiceNumber: data?.invoiceNumber || '',
+    vehicleNumber: data?.vehicleNumber || '',
+    driverName: data?.driverName || '',
+  }
+  const openDetailsDialog = () => { setDetailsForm(null); setOpenDetails(true) }
+
+  const detailsMut = useMutation({
+    mutationFn: (payload) => api(`/receiving/${id}`, { method: 'PUT', body: payload }),
+    onSuccess: () => { toast.success('Details saved'); setOpenDetails(false); qc.invalidateQueries({ queryKey: ['receiving', id] }) },
+    onError: (e) => toast.error(e.message),
+  })
+
+  const setDetails = (patch) => setDetailsForm((f) => ({ ...(f ?? detailsForEdit), ...patch }))
+
   // ---------- Lines (draft edit) ----------
   const [draftLines, setDraftLines] = useState(null) // null => not yet initialized
   const linesForEdit = draftLines ?? ((data?.lines?.map((l) => ({
@@ -233,11 +254,15 @@ const App = ({ params }) => {
               <div className="text-xs text-gray-500">
                 Warehouse <span className="font-medium text-gray-700">{data.warehouse?.code}</span> · Staging <span className="font-mono text-gray-700">{data.stagingLocation?.code}</span>
               </div>
-              {(data.supplier || data.refDocument) && (
+              <div className="text-xs text-gray-500">
+                Supplier: <span className="text-gray-700">{data.supplierRel ? `${data.supplierRel.code} - ${data.supplierRel.name}` : (data.supplier || '-')}</span>
+                {data.refDocument && <> · Ref: <span className="text-gray-700">{data.refDocument}</span></>}
+              </div>
+              {(data.invoiceNumber || data.vehicleNumber || data.driverName) && (
                 <div className="text-xs text-gray-500">
-                  {data.supplier && <>Supplier: <span className="text-gray-700">{data.supplier}</span></>}
-                  {data.supplier && data.refDocument && ' · '}
-                  {data.refDocument && <>Ref: <span className="text-gray-700">{data.refDocument}</span></>}
+                  {data.invoiceNumber && <>Invoice: <span className="text-gray-700">{data.invoiceNumber}</span></>}
+                  {data.vehicleNumber && <> · Vehicle: <span className="text-gray-700">{data.vehicleNumber}</span></>}
+                  {data.driverName && <> · Driver: <span className="text-gray-700">{data.driverName}</span></>}
                 </div>
               )}
               <div className="text-[11px] text-gray-400">Created {formatDistanceToNow(new Date(data.createdAt), { addSuffix: true })}</div>
@@ -247,6 +272,9 @@ const App = ({ params }) => {
               <div className="flex gap-2">
                 {data.status === 'DRAFT' && (
                   <>
+                    <Button size="sm" variant="outline" className="h-8" onClick={openDetailsDialog}>
+                      Details
+                    </Button>
                     <Button size="sm" variant="outline" className="h-8 text-red-600 hover:text-red-700" onClick={() => {
                       const reason = window.prompt('Cancel reason (optional):') ?? null
                       if (reason !== null) cancelMut.mutate(reason)
@@ -424,6 +452,60 @@ const App = ({ params }) => {
           </div>
         )}
       </div>
+
+      {/* DETAILS DIALOG (draft) */}
+      <Dialog open={openDetails} onOpenChange={setOpenDetails}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Receiving Details</DialogTitle>
+            <DialogDescription>Update supplier and inbound shipment information.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Supplier</Label>
+              <Select value={detailsForEdit.supplierId} onValueChange={(v) => setDetails({ supplierId: v, supplier: v ? (meta?.suppliers || []).find((s) => s.id === v)?.name || '' : '' })}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                <SelectContent>
+                  {(meta?.suppliers || []).map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.code} - {s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Reference Document</Label>
+              <Input className="h-9" value={detailsForEdit.refDocument} onChange={(e) => setDetails({ refDocument: e.target.value })} placeholder="PO / Ref number (optional)" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Invoice Number</Label>
+              <Input className="h-9" value={detailsForEdit.invoiceNumber} onChange={(e) => setDetails({ invoiceNumber: e.target.value })} placeholder="Invoice number (optional)" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Vehicle Number</Label>
+                <Input className="h-9" value={detailsForEdit.vehicleNumber} onChange={(e) => setDetails({ vehicleNumber: e.target.value })} placeholder="Vehicle plate (optional)" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Driver Name</Label>
+                <Input className="h-9" value={detailsForEdit.driverName} onChange={(e) => setDetails({ driverName: e.target.value })} placeholder="Driver (optional)" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenDetails(false)}>Cancel</Button>
+            <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => detailsMut.mutate({
+              supplierId: detailsForEdit.supplierId || null,
+              refDocument: detailsForEdit.refDocument,
+              invoiceNumber: detailsForEdit.invoiceNumber,
+              vehicleNumber: detailsForEdit.vehicleNumber,
+              driverName: detailsForEdit.driverName,
+            })} disabled={detailsMut.isPending}>
+              {detailsMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* POST DIALOG */}
       <Dialog open={openPost} onOpenChange={setOpenPost}>

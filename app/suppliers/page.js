@@ -27,24 +27,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import ImportWizard from '@/components/items/import-wizard'
+import SupplierImportWizard from '@/components/suppliers/import-wizard'
 import { Plus, Pencil, Trash2, Loader2, Upload, FileDown, FileSpreadsheet, ChevronDown } from 'lucide-react'
+import { format } from 'date-fns'
 
-const itemSchema = z.object({
-  sku: z.string().min(2, 'SKU is required'),
-  name: z.string().min(2, 'Name is required'),
-  description: z.string().optional(),
-  barcode: z.string().optional(),
-  categoryId: z.string().min(1, 'Category is required'),
-  uomId: z.string().min(1, 'UOM is required'),
-  minStock: z.coerce.number().min(0),
-  reorderPoint: z.coerce.number().min(0),
-  maxStock: z.coerce.number().min(0),
-  unitCost: z.coerce.number().min(0),
-  serialTracked: z.boolean().default(false),
+const supplierSchema = z.object({
+  code: z.string().optional(),
+  name: z.string().min(2, 'Supplier name is required'),
+  picName: z.string().min(1, 'PIC name is required'),
+  phone: z.string().min(3, 'Phone is required'),
+  email: z.string().email('Invalid email').optional().or(z.literal('')),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  province: z.string().optional(),
+  postalCode: z.string().optional(),
+  leadTimeDays: z.coerce.number().min(0, 'Lead time must be >= 0'),
+  taxNumber: z.string().optional(),
+  website: z.string().optional(),
+  notes: z.string().optional(),
+  isActive: z.boolean().default(true),
 })
-
-const fmt = (n) => new Intl.NumberFormat('en-US').format(n || 0)
 
 const App = () => {
   const queryClient = useQueryClient()
@@ -59,8 +61,7 @@ const App = () => {
   const canManage = ['ADMINISTRATOR', 'SUPERVISOR'].includes(me?.user?.role)
   const isAdmin = me?.user?.role === 'ADMINISTRATOR'
 
-  const { data: items = [], isLoading } = useQuery({ queryKey: ['items'], queryFn: () => api('/items') })
-  const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: () => api('/meta') })
+  const { data: suppliers = [], isLoading } = useQuery({ queryKey: ['suppliers'], queryFn: () => api('/suppliers') })
 
   const downloadFile = useCallback(async (path, filename) => {
     const res = await fetch(`/api${path}`, { credentials: 'include' })
@@ -81,14 +82,14 @@ const App = () => {
 
   const downloadTemplate = useCallback(async () => {
     try {
-      await downloadFile('/items/template', 'Master Item Template.xlsx')
+      await downloadFile('/suppliers/template', 'Supplier Template.xlsx')
       toast.success('Template downloaded')
     } catch (e) {
       toast.error(e.message)
     }
   }, [downloadFile])
 
-  const exportItems = useCallback(async (scope) => {
+  const exportSuppliers = useCallback(async (scope) => {
     setExporting(true)
     try {
       let ids = []
@@ -100,9 +101,9 @@ const App = () => {
         ids = rows.map((r) => r.original.id)
       }
       const path = ids.length
-        ? `/items/export?ids=${encodeURIComponent(ids.join(','))}`
-        : '/items/export'
-      await downloadFile(path, `master-items-${new Date().toISOString().slice(0, 10)}.xlsx`)
+        ? `/suppliers/export?ids=${encodeURIComponent(ids.join(','))}`
+        : '/suppliers/export'
+      await downloadFile(path, `suppliers-${new Date().toISOString().slice(0, 10)}.xlsx`)
       toast.success('Export downloaded')
     } catch (e) {
       toast.error(e.message)
@@ -112,43 +113,45 @@ const App = () => {
   }, [downloadFile])
 
   const form = useForm({
-    resolver: zodResolver(itemSchema),
-    defaultValues: { sku: '', name: '', description: '', barcode: '', categoryId: '', uomId: '', minStock: 0, reorderPoint: 0, maxStock: 0, unitCost: 0, serialTracked: false },
+    resolver: zodResolver(supplierSchema),
+    defaultValues: { code: '', name: '', picName: '', phone: '', email: '', address: '', city: '', province: '', postalCode: '', leadTimeDays: 0, taxNumber: '', website: '', notes: '', isActive: true },
   })
 
   const openCreate = () => {
     setEditing(null)
-    form.reset({ sku: '', name: '', description: '', barcode: '', categoryId: '', uomId: '', minStock: 0, reorderPoint: 0, maxStock: 0, unitCost: 0, serialTracked: false })
+    form.reset({ code: '', name: '', picName: '', phone: '', email: '', address: '', city: '', province: '', postalCode: '', leadTimeDays: 0, taxNumber: '', website: '', notes: '', isActive: true })
     setDialogOpen(true)
   }
 
-  const openEdit = (item) => {
-    setEditing(item)
+  const openEdit = (s) => {
+    setEditing(s)
     form.reset({
-      sku: item.sku, name: item.name, description: item.description || '', barcode: item.barcode || '',
-      categoryId: item.categoryId, uomId: item.uomId,
-      minStock: item.minStock, reorderPoint: item.reorderPoint, maxStock: item.maxStock, unitCost: item.unitCost,
-      serialTracked: !!item.serialTracked,
+      code: s.code, name: s.name, picName: s.picName, phone: s.phone, email: s.email || '',
+      address: s.address || '', city: s.city || '', province: s.province || '', postalCode: s.postalCode || '',
+      leadTimeDays: s.leadTimeDays || 0, taxNumber: s.taxNumber || '', website: s.website || '', notes: s.notes || '',
+      isActive: !!s.isActive,
     })
     setDialogOpen(true)
   }
 
   const saveMutation = useMutation({
     mutationFn: (values) =>
-      editing ? api(`/items/${editing.id}`, { method: 'PUT', body: values }) : api('/items', { method: 'POST', body: values }),
+      editing ? api(`/suppliers/${editing.id}`, { method: 'PUT', body: values }) : api('/suppliers', { method: 'POST', body: values }),
     onSuccess: () => {
-      toast.success(editing ? 'Item updated' : 'Item created')
-      queryClient.invalidateQueries({ queryKey: ['items'] })
+      toast.success(editing ? 'Supplier updated' : 'Supplier created')
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] })
+      queryClient.invalidateQueries({ queryKey: ['meta'] })
       setDialogOpen(false)
     },
     onError: (e) => toast.error(e.message),
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id) => api(`/items/${id}`, { method: 'DELETE' }),
+    mutationFn: (id) => api(`/suppliers/${id}`, { method: 'DELETE' }),
     onSuccess: (res) => {
-      toast.success(res.deactivated ? 'Item deactivated (has ledger history)' : 'Item deleted')
-      queryClient.invalidateQueries({ queryKey: ['items'] })
+      toast.success(res.deactivated ? 'Supplier deactivated' : 'Supplier deleted')
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] })
+      queryClient.invalidateQueries({ queryKey: ['meta'] })
       setDeleting(null)
     },
     onError: (e) => toast.error(e.message),
@@ -156,21 +159,16 @@ const App = () => {
 
   const columns = useMemo(
     () => [
-      { accessorKey: 'sku', header: 'SKU', cell: ({ row }) => <span className="font-mono text-xs">{row.original.sku}</span> },
-      { accessorKey: 'name', header: 'Item Name' },
-      { accessorKey: 'category.name', header: 'Category', id: 'category', accessorFn: (r) => r.category?.name || '' },
-      { accessorKey: 'uom.code', header: 'UOM', id: 'uom', accessorFn: (r) => r.uom?.code || '' },
+      { accessorKey: 'code', header: 'Code', cell: ({ row }) => <span className="font-mono text-xs">{row.original.code}</span> },
+      { accessorKey: 'name', header: 'Supplier' },
+      { accessorKey: 'picName', header: 'PIC' },
+      { accessorKey: 'phone', header: 'Phone', cell: ({ row }) => <span className="text-xs text-gray-500">{row.original.phone}</span> },
+      { accessorKey: 'city', header: 'City', cell: ({ row }) => <span className="text-xs text-gray-500">{row.original.city || '-'}</span> },
       {
-        accessorKey: 'onHand',
-        header: 'On Hand',
-        cell: ({ row }) => {
-          const { onHand, reorderPoint, minStock } = row.original
-          const cls = onHand <= minStock ? 'border-red-200 bg-red-50 text-red-700' : onHand <= reorderPoint ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-green-200 bg-green-50 text-green-700'
-          return <Badge variant="outline" className={`tabular-nums ${cls}`}>{fmt(onHand)}</Badge>
-        },
+        accessorKey: 'leadTimeDays',
+        header: 'Lead Time',
+        cell: ({ row }) => <span className="tabular-nums text-gray-500">{row.original.leadTimeDays} days</span>,
       },
-      { accessorKey: 'reorderPoint', header: 'Reorder Pt', cell: ({ row }) => <span className="tabular-nums text-gray-500">{fmt(row.original.reorderPoint)}</span> },
-      { accessorKey: 'unitCost', header: 'Unit Cost', cell: ({ row }) => <span className="tabular-nums">${row.original.unitCost}</span> },
       {
         accessorKey: 'isActive',
         header: 'Status',
@@ -180,6 +178,11 @@ const App = () => {
           ) : (
             <Badge variant="outline" className="border-gray-200 bg-gray-50 text-gray-500">Inactive</Badge>
           ),
+      },
+      {
+        accessorKey: 'createdAt',
+        header: 'Created',
+        cell: ({ row }) => <span className="text-xs text-gray-500">{format(new Date(row.original.createdAt), 'dd MMM yyyy')}</span>,
       },
       {
         id: 'actions',
@@ -206,22 +209,22 @@ const App = () => {
 
   return (
     <AppShell
-      title="Master Item"
-      subtitle="Item master data — on-hand quantity is always computed from the Stock Ledger"
+      title="Supplier"
+      subtitle="Supplier master data used on Receiving. Suppliers must be active to appear in Receiving."
       actions={
         canManage ? (
           <Button size="sm" className="h-8 bg-blue-600 text-xs hover:bg-blue-700" onClick={openCreate}>
-            <Plus className="mr-1 h-3.5 w-3.5" /> New Item
+            <Plus className="mr-1 h-3.5 w-3.5" /> New Supplier
           </Button>
         ) : null
       }
     >
       <DataTable
         columns={columns}
-        data={items}
+        data={suppliers}
         isLoading={isLoading}
-        searchPlaceholder="Search SKU, name, category..."
-        exportName="master-items"
+        searchPlaceholder="Search code, name, PIC, phone, city..."
+        exportName="suppliers"
         tableRef={tableRef}
         toolbar={
           canManage && (
@@ -241,9 +244,9 @@ const App = () => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="min-w-[160px]">
-                  <DropdownMenuItem className="text-xs" onSelect={() => exportItems('page')}>Current Page</DropdownMenuItem>
-                  <DropdownMenuItem className="text-xs" onSelect={() => exportItems('filtered')}>Filtered Rows</DropdownMenuItem>
-                  <DropdownMenuItem className="text-xs" onSelect={() => exportItems('all')}>All Items</DropdownMenuItem>
+                  <DropdownMenuItem className="text-xs" onSelect={() => exportSuppliers('page')}>Current Page</DropdownMenuItem>
+                  <DropdownMenuItem className="text-xs" onSelect={() => exportSuppliers('filtered')}>Filtered Rows</DropdownMenuItem>
+                  <DropdownMenuItem className="text-xs" onSelect={() => exportSuppliers('all')}>All Suppliers</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -251,103 +254,108 @@ const App = () => {
         }
       />
 
-      <ImportWizard
+      <SupplierImportWizard
         open={importOpen}
         onOpenChange={setImportOpen}
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['items'] })}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['suppliers'] })
+          queryClient.invalidateQueries({ queryKey: ['meta'] })
+        }}
       />
 
       {/* Create / Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-base">{editing ? `Edit Item — ${editing.sku}` : 'New Item'}</DialogTitle>
+            <DialogTitle className="text-base">{editing ? `Edit Supplier — ${editing.code}` : 'New Supplier'}</DialogTitle>
             <DialogDescription className="text-xs">
-              {editing ? 'Update master data. Stock quantity cannot be edited here — use inventory transactions.' : 'Create a new item master record.'}
+              {editing ? 'Update supplier master data. Deleting is handled from the table.' : 'Supplier code is auto-generated unless you provide one.'}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={form.handleSubmit((v) => saveMutation.mutate(v))} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">SKU *</Label>
-                <Input {...form.register('sku')} disabled={!!editing} className="h-8 font-mono text-xs" placeholder="FUR-CHR-001" />
-                {form.formState.errors.sku && <p className="text-[11px] text-red-600">{form.formState.errors.sku.message}</p>}
+                <Label className="text-xs">Supplier Code</Label>
+                <Input {...form.register('code')} disabled={!!editing} className="h-8 font-mono text-xs" placeholder="SUP-000001 (auto)" />
+                {form.formState.errors.code && <p className="text-[11px] text-red-600">{form.formState.errors.code.message}</p>}
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Barcode</Label>
-                <Input {...form.register('barcode')} className="h-8 font-mono text-xs" placeholder="same as SKU if empty" />
+                <Label className="text-xs">Lead Time (days)</Label>
+                <Input type="number" min="0" step="1" {...form.register('leadTimeDays')} className="h-8 text-xs" />
+                {form.formState.errors.leadTimeDays && <p className="text-[11px] text-red-600">{form.formState.errors.leadTimeDays.message}</p>}
               </div>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Item Name *</Label>
+              <Label className="text-xs">Supplier Name *</Label>
               <Input {...form.register('name')} className="h-8 text-sm" />
               {form.formState.errors.name && <p className="text-[11px] text-red-600">{form.formState.errors.name.message}</p>}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Category *</Label>
-                <Select value={form.watch('categoryId')} onValueChange={(v) => form.setValue('categoryId', v, { shouldValidate: true })}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select category" /></SelectTrigger>
-                  <SelectContent>
-                    {(meta?.categories || []).map((c) => (
-                      <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {form.formState.errors.categoryId && <p className="text-[11px] text-red-600">{form.formState.errors.categoryId.message}</p>}
+                <Label className="text-xs">PIC Name *</Label>
+                <Input {...form.register('picName')} className="h-8 text-xs" />
+                {form.formState.errors.picName && <p className="text-[11px] text-red-600">{form.formState.errors.picName.message}</p>}
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Unit of Measure *</Label>
-                <Select value={form.watch('uomId')} onValueChange={(v) => form.setValue('uomId', v, { shouldValidate: true })}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select UOM" /></SelectTrigger>
-                  <SelectContent>
-                    {(meta?.uoms || []).map((u) => (
-                      <SelectItem key={u.id} value={u.id} className="text-xs">{u.code} — {u.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {form.formState.errors.uomId && <p className="text-[11px] text-red-600">{form.formState.errors.uomId.message}</p>}
+                <Label className="text-xs">Phone *</Label>
+                <Input {...form.register('phone')} className="h-8 text-xs" />
+                {form.formState.errors.phone && <p className="text-[11px] text-red-600">{form.formState.errors.phone.message}</p>}
               </div>
             </div>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Min Stock</Label>
-                <Input type="number" step="any" {...form.register('minStock')} className="h-8 text-xs" />
+                <Label className="text-xs">Email</Label>
+                <Input type="email" {...form.register('email')} className="h-8 text-xs" />
+                {form.formState.errors.email && <p className="text-[11px] text-red-600">{form.formState.errors.email.message}</p>}
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Reorder Pt</Label>
-                <Input type="number" step="any" {...form.register('reorderPoint')} className="h-8 text-xs" />
+                <Label className="text-xs">Website</Label>
+                <Input {...form.register('website')} className="h-8 text-xs" />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Max Stock</Label>
-                <Input type="number" step="any" {...form.register('maxStock')} className="h-8 text-xs" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Unit Cost ($)</Label>
-                <Input type="number" step="any" {...form.register('unitCost')} className="h-8 text-xs" />
-              </div>
-            </div>
-            <div className="flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 p-2.5">
-              <input
-                id="serialTracked"
-                type="checkbox"
-                {...form.register('serialTracked')}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <label htmlFor="serialTracked" className="text-xs">
-                <span className="font-medium">Serial-tracked item</span>
-                <span className="ml-2 text-gray-500">Every unit must have a unique serial number captured on Receiving.</span>
-              </label>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Description</Label>
-              <Textarea {...form.register('description')} rows={2} className="text-xs" />
+              <Label className="text-xs">Address</Label>
+              <Input {...form.register('address')} className="h-8 text-xs" />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">City</Label>
+                <Input {...form.register('city')} className="h-8 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Province</Label>
+                <Input {...form.register('province')} className="h-8 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Postal Code</Label>
+                <Input {...form.register('postalCode')} className="h-8 text-xs" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Tax Number / NPWP</Label>
+                <Input {...form.register('taxNumber')} className="h-8 text-xs" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Status</Label>
+                <Select value={form.watch('isActive') ? 'active' : 'inactive'} onValueChange={(v) => form.setValue('isActive', v === 'active')}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active" className="text-xs">Active</SelectItem>
+                    <SelectItem value="inactive" className="text-xs">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Notes</Label>
+              <Textarea {...form.register('notes')} rows={2} className="text-xs" />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDialogOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={saveMutation.isPending} className="h-8 bg-blue-600 text-xs hover:bg-blue-700">
                 {saveMutation.isPending && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                {editing ? 'Save Changes' : 'Create Item'}
+                {editing ? 'Save Changes' : 'Create Supplier'}
               </Button>
             </DialogFooter>
           </form>
@@ -358,9 +366,9 @@ const App = () => {
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-base">Delete item {deleting?.sku}?</AlertDialogTitle>
+            <AlertDialogTitle className="text-base">Delete supplier {deleting?.code}?</AlertDialogTitle>
             <AlertDialogDescription className="text-xs">
-              If this item has stock ledger history it will be deactivated instead of deleted, preserving full traceability. This action is recorded in the Audit Trail.
+              If this supplier has been used on any Receiving it will be deactivated instead, preserving full traceability. This action is recorded in the Audit Trail.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

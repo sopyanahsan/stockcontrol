@@ -99,6 +99,30 @@ import {
   getShippingKPIs,
 } from '@/lib/shipping-service'
 import { lookupByBarcode } from '@/lib/barcode-service'
+import { parseItemWorkbook, dryRunItemImport, importItems, ItemImportError, IMPORT_MAX_ROWS } from '@/lib/item-import-service'
+import { exportItemsToWorkbook } from '@/lib/item-export-service'
+import { buildItemTemplateWorkbook } from '@/lib/item-template-service'
+
+// ---------- Supplier Service ----------
+import {
+  listSuppliers,
+  getSupplier,
+  createSupplier,
+  updateSupplier,
+  setSupplierActive,
+  deleteSupplier,
+  getSupplierStats,
+  getSupplierReport,
+} from '@/lib/supplier-service'
+import {
+  parseSupplierWorkbook,
+  dryRunSupplierImport,
+  importSuppliers,
+  SupplierImportError,
+  SUPPLIER_IMPORT_MAX_ROWS,
+} from '@/lib/supplier-import-service'
+import { exportSuppliersToWorkbook } from '@/lib/supplier-export-service'
+import { buildSupplierTemplateWorkbook } from '@/lib/supplier-template-service'
 
 // ---------- Stock Opname Service ----------
 import {
@@ -226,6 +250,14 @@ const err = (message, status = 400) => {
   return NextResponse.json({ success: false, message: safeMessage, error: safeMessage, errors: [{ message: safeMessage }] }, { status })
 }
 
+const xlsxResponse = (buffer, filename) =>
+  new Response(new Uint8Array(buffer), {
+    headers: {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    },
+  })
+
 function readIntParam(searchParams, name, fallback, max) {
   const raw = searchParams.get(name)
   if (raw == null || raw === '') return fallback
@@ -291,6 +323,8 @@ async function handleDashboard() {
     ]),
     getShippingKPIs(),
   ])
+
+  const supplierStats = await getSupplierStats()
 
   const [pendingPicking, pickingInProgress, pickingCompletedToday] = pickingStats
 
@@ -359,6 +393,7 @@ async function handleDashboard() {
 
   return json({
     stats: { totalItems, totalLocations, totalUnits, totalValue, lowStockCount: lowStock.length, todayMovements },
+    suppliers: supplierStats,
     picking: {
       pendingPicking,
       pickingInProgress,
@@ -447,6 +482,229 @@ async function deleteItem(user, id) {
   await prisma.item.delete({ where: { id } })
   await logAudit({ user, action: 'DELETE', module: 'MASTER_ITEM', entityType: 'Item', entityId: id, description: `Deleted item ${before.sku} - ${before.name}`, before })
   return json({ deleted: true })
+}
+
+// ==================== ITEM BULK IMPORT / EXPORT / TEMPLATE ====================
+async function handleItemImport(request, user) {
+  if (!canManageMaster(user.role)) return err('Insufficient permissions', 403)
+  const form = await request.formData().catch(() => null)
+  if (!form) return err('Expected multipart form data', 400)
+  const file = form.get('file')
+  if (!file || typeof file === 'string') return err('No file uploaded', 400)
+  const fileName = file.name || 'upload.xlsx'
+  const mode = form.get('mode') === 'partial' ? 'partial' : 'strict'
+  const dryRun = form.get('dryRun') === 'true'
+
+  let rows
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer())
+    rows = parseItemWorkbook(buffer)
+  } catch (e) {
+    return err(e.message, 400)
+  }
+  if (rows.length > IMPORT_MAX_ROWS) return err(`File exceeds the ${IMPORT_MAX_ROWS.toLocaleString()} row limit`, 400)
+
+  // Validation-only pass — returns the summary, imports nothing.
+  if (dryRun) {
+    try {
+      const summary = await dryRunItemImport(rows)
+      return json({ dryRun: true, ...summary })
+    } catch (e) {
+      return err(e.message, 400)
+    }
+  }
+
+  // Real import — stream NDJSON progress (10/20/.../100) so the UI never freezes.
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    async start(controller) {
+      const emit = (obj) => {
+        try { controller.enqueue(encoder.encode(JSON.stringify(obj) + '\n')) } catch { /* stream closed */ }
+      }
+      try {
+        const result = await importItems({
+          user,
+          fileName,
+          rows,
+          mode,
+          onProgress: (pct) => emit({ progress: pct }),
+        })
+        emit({ progress: 100, result })
+      } catch (e) {
+        emit({ error: e.message, errors: e instanceof ItemImportError ? e.errors : undefined })
+      } finally {
+        try { controller.close() } catch { /* already closed */ }
+      }
+    },
+  })
+  return new Response(stream, {
+    headers: { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' },
+  })
+}
+
+async function handleItemTemplate(user) {
+  if (!canManageMaster(user.role)) return err('Insufficient permissions', 403)
+  try {
+    const { buffer, filename } = await buildItemTemplateWorkbook()
+    return xlsxResponse(buffer, filename)
+  } catch (e) {
+    return err(e.message, 400)
+  }
+}
+
+async function handleItemExport(request, user) {
+  if (!canViewReports(user.role)) return err('Insufficient permissions', 403)
+  const idsParam = request.nextUrl.searchParams.get('ids')
+  const ids = idsParam ? idsParam.split(',').map((s) => s.trim()).filter(Boolean) : []
+  try {
+    const { buffer } = await exportItemsToWorkbook({ ids })
+    return xlsxResponse(buffer, `master-items-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  } catch (e) {
+    return err(e.message, 400)
+  }
+}
+
+// ==================== SUPPLIERS ====================
+async function handleSupplierList(searchParams) {
+  const suppliers = await listSuppliers({
+    search: searchParams.get('search') || undefined,
+    status: searchParams.get('status') || undefined,
+    city: searchParams.get('city') || undefined,
+    leadTime: searchParams.get('leadTime') || undefined,
+    sortBy: searchParams.get('sortBy') || undefined,
+    sortOrder: searchParams.get('sortOrder') || undefined,
+    limit: getLimit(searchParams, 100, 1000),
+    offset: readIntParam(searchParams, 'offset', 0, 100000),
+  })
+  return json(suppliers)
+}
+
+async function handleSupplierGet(id) {
+  const supplier = await getSupplier(id)
+  if (!supplier) return err('Supplier not found', 404)
+  return json(supplier)
+}
+
+async function handleSupplierCreate(request, user) {
+  if (!canManageMaster(user.role)) return err('Insufficient permissions', 403)
+  const body = await parseBody(request)
+  try {
+    const supplier = await createSupplier({ user, body })
+    return json(supplier, 201)
+  } catch (e) {
+    return err(e.message, e.status || 400)
+  }
+}
+
+async function handleSupplierUpdate(request, user, id) {
+  if (!canManageMaster(user.role)) return err('Insufficient permissions', 403)
+  const body = await parseBody(request)
+  try {
+    const supplier = await updateSupplier({ user, id, body })
+    return json(supplier)
+  } catch (e) {
+    return err(e.message, e.status || 400)
+  }
+}
+
+async function handleSupplierDelete(user, id) {
+  if (user.role !== 'ADMINISTRATOR') return err('Only Administrator can delete suppliers', 403)
+  try {
+    return json(await deleteSupplier({ user, id }))
+  } catch (e) {
+    return err(e.message, e.status || 400)
+  }
+}
+
+async function handleSupplierImport(request, user) {
+  if (!canManageMaster(user.role)) return err('Insufficient permissions', 403)
+  const form = await request.formData().catch(() => null)
+  if (!form) return err('Expected multipart form data', 400)
+  const file = form.get('file')
+  if (!file || typeof file === 'string') return err('No file uploaded', 400)
+  const fileName = file.name || 'upload.xlsx'
+  const mode = form.get('mode') === 'partial' ? 'partial' : 'strict'
+  const dryRun = form.get('dryRun') === 'true'
+
+  let rows
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer())
+    rows = parseSupplierWorkbook(buffer)
+  } catch (e) {
+    return err(e.message, 400)
+  }
+  if (rows.length > SUPPLIER_IMPORT_MAX_ROWS) {
+    return err(`File exceeds the ${SUPPLIER_IMPORT_MAX_ROWS.toLocaleString()} row limit`, 400)
+  }
+
+  if (dryRun) {
+    try {
+      const summary = await dryRunSupplierImport(rows)
+      return json({ dryRun: true, ...summary })
+    } catch (e) {
+      return err(e.message, 400)
+    }
+  }
+
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    async start(controller) {
+      const emit = (obj) => {
+        try { controller.enqueue(encoder.encode(JSON.stringify(obj) + '\n')) } catch { /* stream closed */ }
+      }
+      try {
+        const result = await importSuppliers({
+          user,
+          fileName,
+          rows,
+          mode,
+          onProgress: (pct) => emit({ progress: pct }),
+        })
+        emit({ progress: 100, result })
+      } catch (e) {
+        emit({ error: e.message, errors: e instanceof SupplierImportError ? e.errors : undefined })
+      } finally {
+        try { controller.close() } catch { /* already closed */ }
+      }
+    },
+  })
+  return new Response(stream, {
+    headers: { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' },
+  })
+}
+
+async function handleSupplierTemplate(user) {
+  if (!canManageMaster(user.role)) return err('Insufficient permissions', 403)
+  try {
+    const { buffer, filename } = await buildSupplierTemplateWorkbook(user)
+    return xlsxResponse(buffer, filename)
+  } catch (e) {
+    return err(e.message, 400)
+  }
+}
+
+async function handleSupplierExport(request, user) {
+  if (!canManageMaster(user.role)) return err('Insufficient permissions', 403)
+  const idsParam = request.nextUrl.searchParams.get('ids')
+  const ids = idsParam ? idsParam.split(',').map((s) => s.trim()).filter(Boolean) : []
+  try {
+    const { buffer } = await exportSuppliersToWorkbook({ ids }, user)
+    return xlsxResponse(buffer, `suppliers-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  } catch (e) {
+    return err(e.message, 400)
+  }
+}
+
+async function handleSupplierReport(searchParams) {
+  const result = await getSupplierReport({
+    fromDate: searchParams.get('fromDate') || undefined,
+    toDate: searchParams.get('toDate') || undefined,
+    status: searchParams.get('status') || undefined,
+    city: searchParams.get('city') || undefined,
+    limit: getLimit(searchParams, 500, 1000),
+    offset: readIntParam(searchParams, 'offset', 0, 100000),
+  })
+  return reportResponse('supplier', result, Object.fromEntries(searchParams))
 }
 
 // ==================== CATEGORIES ====================
@@ -683,13 +941,14 @@ async function listAuditLogs(searchParams) {
 
 // ==================== META ====================
 async function getMeta() {
-  const [categories, uoms, warehouses, reasonCodes] = await Promise.all([
+  const [categories, uoms, warehouses, reasonCodes, suppliers] = await Promise.all([
     prisma.category.findMany({ orderBy: { name: 'asc' } }),
     prisma.uom.findMany({ orderBy: { code: 'asc' } }),
-    prisma.warehouse.findMany({ include: { zones: { include: { locations: { where: { isActive: true } } }, orderBy: { code: 'asc' } } }, orderBy: { code: 'asc' } }),
+    prisma.warehouse.findMany({ include: { zones: { include: { locations: { where: { isActive: true } }, orderBy: { code: 'asc' } } }, orderBy: { code: 'asc' } } }),
     prisma.reasonCode.findMany({ where: { isActive: true }, orderBy: { code: 'asc' } }),
+    prisma.supplier.findMany({ where: { isActive: true }, orderBy: { code: 'asc' } }),
   ])
-  return json({ categories, uoms, warehouses, reasonCodes })
+  return json({ categories, uoms, warehouses, reasonCodes, suppliers })
 }
 
 // ==================== ROUTER ====================
@@ -721,6 +980,9 @@ async function route(request, ctx) {
     if (seg === 'meta' && method === 'GET') return await getMeta()
 
     if (seg === 'items') {
+      if (path[1] === 'import' && method === 'POST') return await handleItemImport(request, user)
+      if (path[1] === 'template' && method === 'GET') return await handleItemTemplate(user)
+      if (path[1] === 'export' && method === 'GET') return await handleItemExport(request, user)
       if (!path[1]) {
         if (method === 'GET') return await listItems()
         if (method === 'POST') return await createItem(request, user)
@@ -747,6 +1009,22 @@ async function route(request, ctx) {
       } else {
         if (method === 'PUT') return await updateUom(request, user, path[1])
         if (method === 'DELETE') return await deleteUom(user, path[1])
+      }
+    }
+
+    if (seg === 'suppliers') {
+      if (path[1] === 'import' && method === 'POST') return await handleSupplierImport(request, user)
+      if (path[1] === 'template' && method === 'GET') return await handleSupplierTemplate(user)
+      if (path[1] === 'export' && method === 'GET') return await handleSupplierExport(request, user)
+      if (path[1] === 'report' && method === 'GET') return await handleSupplierReport(searchParams)
+      if (!path[1]) {
+        if (method === 'GET') return await handleSupplierList(searchParams)
+        if (method === 'POST') return await handleSupplierCreate(request, user)
+      } else {
+        const id = path[1]
+        if (method === 'GET') return await handleSupplierGet(id)
+        if (method === 'PUT' || method === 'PATCH') return await handleSupplierUpdate(request, user, id)
+        if (method === 'DELETE') return await handleSupplierDelete(user, id)
       }
     }
 

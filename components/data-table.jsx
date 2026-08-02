@@ -40,6 +40,7 @@ export default function DataTable({
   exportName = 'export',
   toolbar = null,
   pageSize = 25,
+  tableRef = null,
 }) {
   const [sorting, setSorting] = useState([])
   const [globalFilter, setGlobalFilter] = useState('')
@@ -60,6 +61,10 @@ export default function DataTable({
     getPaginationRowModel: getPaginationRowModel(),
     initialState: { pagination: { pageSize } },
   })
+
+  if (tableRef) {
+    tableRef.current = table
+  }
 
   const skeletonRows = useMemo(() => Array.from({ length: 8 }), [])
 

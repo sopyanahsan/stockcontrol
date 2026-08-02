@@ -48,14 +48,14 @@ const App = () => {
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: () => api('/meta') })
 
-  const [form, setForm] = useState({ warehouseId: '', supplier: '', refDocument: '', remarks: '' })
+  const [form, setForm] = useState({ warehouseId: '', supplierId: '', supplier: '', refDocument: '', invoiceNumber: '', vehicleNumber: '', driverName: '', remarks: '' })
 
   const createMut = useMutation({
     mutationFn: (payload) => api('/receiving', { method: 'POST', body: payload }),
     onSuccess: (r) => {
       toast.success(`Created ${r.grnNumber}`)
       setOpenCreate(false)
-      setForm({ warehouseId: '', supplier: '', refDocument: '', remarks: '' })
+      setForm({ warehouseId: '', supplierId: '', supplier: '', refDocument: '', invoiceNumber: '', vehicleNumber: '', driverName: '', remarks: '' })
       qc.invalidateQueries({ queryKey: ['receiving-list'] })
       router.push(`/receiving/${r.id}`)
     },
@@ -168,11 +168,32 @@ const App = () => {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Supplier</Label>
-              <Input className="h-9" value={form.supplier} onChange={(e) => setForm((f) => ({ ...f, supplier: e.target.value }))} placeholder="Supplier name (optional)" />
+              <Select value={form.supplierId} onValueChange={(v) => setForm((f) => ({ ...f, supplierId: v, supplier: v ? (meta?.suppliers || []).find((s) => s.id === v)?.name || '' : '' }))}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                <SelectContent>
+                  {(meta?.suppliers || []).map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.code} - {s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Reference Document</Label>
-              <Input className="h-9" value={form.refDocument} onChange={(e) => setForm((f) => ({ ...f, refDocument: e.target.value }))} placeholder="PO / Invoice / Ref number (optional)" />
+              <Input className="h-9" value={form.refDocument} onChange={(e) => setForm((f) => ({ ...f, refDocument: e.target.value }))} placeholder="PO / Ref number (optional)" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Invoice Number</Label>
+              <Input className="h-9" value={form.invoiceNumber} onChange={(e) => setForm((f) => ({ ...f, invoiceNumber: e.target.value }))} placeholder="Invoice number (optional)" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Vehicle Number</Label>
+                <Input className="h-9" value={form.vehicleNumber} onChange={(e) => setForm((f) => ({ ...f, vehicleNumber: e.target.value }))} placeholder="Vehicle plate (optional)" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Driver Name</Label>
+                <Input className="h-9" value={form.driverName} onChange={(e) => setForm((f) => ({ ...f, driverName: e.target.value }))} placeholder="Driver (optional)" />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Remarks</Label>

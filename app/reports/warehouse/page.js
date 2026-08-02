@@ -406,6 +406,74 @@ function AdjustmentTab({ active }) {
   )
 }
 
+function SupplierTab({ active }) {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['reports', 'warehouse', 'supplier'],
+    queryFn: () => api('/suppliers/report'),
+    enabled: active,
+  })
+
+  const rows = useMemo(() => data?.data || [], [data])
+
+  const columns = useMemo(
+    () => [
+      { id: 'supplierCode', header: 'Code', accessorFn: (r) => r.supplierCode || '', cell: ({ row }) => <span className="font-mono text-xs">{row.original.supplierCode || '—'}</span> },
+      { id: 'supplierName', header: 'Supplier', accessorFn: (r) => r.supplierName || '', cell: ({ row }) => <span className="text-xs font-medium">{row.original.supplierName || '—'}</span> },
+      { id: 'picName', header: 'PIC', accessorFn: (r) => r.picName || '', cell: ({ row }) => <span className="text-xs">{row.original.picName || '—'}</span> },
+      { id: 'city', header: 'City', accessorFn: (r) => r.city || '', cell: ({ row }) => <span className="text-xs text-gray-500">{row.original.city || '—'}</span> },
+      { accessorKey: 'totalReceivings', header: 'Receivings', cell: ({ row }) => <span className="tabular-nums text-xs">{fmt(row.original.totalReceivings)}</span> },
+      { accessorKey: 'totalReceivedQty', header: 'Qty Received', cell: ({ row }) => <span className="tabular-nums font-medium">{fmt(row.original.totalReceivedQty)}</span> },
+      {
+        id: 'lastDelivery', header: 'Last Delivery',
+        accessorFn: (r) => r.lastDelivery || '',
+        cell: ({ row }) => (
+          <span className="text-xs text-gray-500">
+            {row.original.lastDelivery ? format(parseISO(row.original.lastDelivery), 'dd MMM yyyy') : '—'}
+          </span>
+        ),
+      },
+      { accessorKey: 'averageLeadTimeDays', header: 'Avg Lead Time', cell: ({ row }) => <span className="tabular-nums text-xs text-gray-500">{row.original.averageLeadTimeDays} days</span> },
+      {
+        id: 'status', header: 'Status',
+        accessorFn: (r) => r.status || '',
+        cell: ({ row }) => (
+          row.original.status === 'Active'
+            ? <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700 text-[11px]">Active</Badge>
+            : <Badge variant="outline" className="border-gray-200 bg-gray-50 text-gray-500 text-[11px]">Inactive</Badge>
+        ),
+      },
+    ],
+    []
+  )
+
+  const kpis = useMemo(() => {
+    if (!data) return emptyKpis()
+    return [
+      { label: 'Total Suppliers', value: fmt(data?.summary?.totalSuppliers || rows.length), sub: 'Registered' },
+      { label: 'Active', value: fmt(data?.summary?.activeSuppliers || 0), sub: 'Usable on Receiving', accent: 'green' },
+      { label: 'Total Receivings', value: fmt(data?.summary?.totalReceivings || 0), sub: 'GRNs posted' },
+      { label: 'Qty Received', value: fmt(data?.summary?.totalReceivedQty || 0), sub: 'Units inbound', accent: 'blue' },
+    ]
+  }, [data, rows])
+
+  return (
+    <div className="space-y-4">
+      <KPIGrid items={kpis} />
+      <ReportTable
+        columns={columns}
+        data={rows}
+        isLoading={isLoading}
+        error={error}
+        onRetry={refetch}
+        searchPlaceholder="Search supplier, code, PIC, city..."
+        exportName="supplier-report"
+        exportTitle="Supplier Report"
+        pageSize={20}
+      />
+    </div>
+  )
+}
+
 function CycleCountTab({ active }) {
   const [dateRange, setDateRange] = useState('30')
   const fromDate = useFromDate(dateRange)
@@ -492,7 +560,7 @@ export default function WarehouseReportsPage() {
   const [activeTab, setActiveTab] = useState('receiving')
 
   return (
-    <ReportLayout title="Warehouse Reports" subtitle="Receiving, putaway, movement, adjustment, and cycle count reports">
+    <ReportLayout title="Warehouse Reports" subtitle="Receiving, putaway, movement, adjustment, cycle count, and supplier reports">
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4 h-8">
           <TabsTrigger value="receiving" className="text-xs">Receiving</TabsTrigger>
@@ -500,6 +568,7 @@ export default function WarehouseReportsPage() {
           <TabsTrigger value="movement" className="text-xs">Movement</TabsTrigger>
           <TabsTrigger value="adjustment" className="text-xs">Adjustment</TabsTrigger>
           <TabsTrigger value="cycle-count" className="text-xs">Cycle Count</TabsTrigger>
+          <TabsTrigger value="supplier" className="text-xs">Supplier</TabsTrigger>
         </TabsList>
         <TabsContent value="receiving" key="receiving">
           <ReceivingTab active={activeTab === 'receiving'} />
@@ -515,6 +584,9 @@ export default function WarehouseReportsPage() {
         </TabsContent>
         <TabsContent value="cycle-count" key="cycle-count">
           <CycleCountTab active={activeTab === 'cycle-count'} />
+        </TabsContent>
+        <TabsContent value="supplier" key="supplier">
+          <SupplierTab active={activeTab === 'supplier'} />
         </TabsContent>
       </Tabs>
     </ReportLayout>

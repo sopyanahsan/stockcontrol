@@ -8,7 +8,7 @@ import { api } from '@/lib/api-client'
 import {
   LayoutDashboard, Package, MapPin, Boxes, ClipboardList, Truck, ArrowRightLeft,
   SlidersHorizontal, CalendarCheck, FileSearch, BarChart3, ChevronsLeft, ChevronsRight,
-  Search, LogOut, PackageOpen, Warehouse, ScrollText, Ship, Tags, Ruler,
+  Search, LogOut, PackageOpen, Warehouse, ScrollText, Ship, Tags, Ruler, Store,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -32,6 +32,7 @@ const NAV_SECTIONS = [
       { href: '/categories', label: 'Master Category', icon: Tags },
       { href: '/uoms', label: 'Master UOM', icon: Ruler },
       { href: '/locations', label: 'Warehouse Location', icon: MapPin },
+      { href: '/suppliers', label: 'Supplier', icon: Store },
     ],
   },
   {

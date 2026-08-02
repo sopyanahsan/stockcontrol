@@ -204,7 +204,11 @@ model Receiving {
   id                               String          @id @default(uuid())
   grnNumber                        String          @unique
   supplier                         String?
+  supplierId                       String?
   refDocument                      String?
+  invoiceNumber                    String?
+  vehicleNumber                    String?
+  driverName                       String?
   remarks                          String?
   createdById                      String
   postedAt                         DateTime?
@@ -221,11 +225,38 @@ model Receiving {
   User_Receiving_postedByIdToUser  User?           @relation("Receiving_postedByIdToUser", fields: [postedById], references: [id])
   stagingLocation                  Location        @relation("ReceivingStaging", fields: [stagingLocationId], references: [id])
   warehouse                        Warehouse       @relation(fields: [warehouseId], references: [id])
+  supplierRel                      Supplier?       @relation(fields: [supplierId], references: [id])
   lines                            ReceivingLine[]
 
   @@index([status])
   @@index([warehouseId])
+  @@index([supplierId])
   @@index([createdAt])
+}
+
+model Supplier {
+  id            String      @id @default(uuid())
+  code          String      @unique
+  name          String
+  picName       String
+  phone         String
+  email         String?
+  address       String?
+  city          String?
+  province      String?
+  postalCode    String?
+  leadTimeDays  Int         @default(0)
+  taxNumber     String?
+  website       String?
+  notes         String?
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  receivings    Receiving[]
+
+  @@index([name])
+  @@index([city])
+  @@index([isActive])
 }
 
 model ReceivingLine {

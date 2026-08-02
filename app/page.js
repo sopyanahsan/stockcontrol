@@ -7,7 +7,7 @@ import { api } from '@/lib/api-client'
 import AppShell from '@/components/app-shell'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
-import { Package, Boxes, DollarSign, AlertTriangle, Activity, MapPin, ClipboardList, Clock, Target, CheckCircle2, PackageCheck, Layers } from 'lucide-react'
+import { Package, Boxes, DollarSign, AlertTriangle, Activity, MapPin, ClipboardList, Clock, Target, CheckCircle2, PackageCheck, Layers, Store, Users, UserX, UserPlus } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer,
   AreaChart, Area, Legend,
@@ -86,6 +86,20 @@ const App = () => {
             <StatCard icon={Boxes} label="Stock on Hand" value={fmt(data?.stats?.totalUnits)} sub="units across all locations" accent="text-indigo-600 bg-indigo-50" />
             <StatCard icon={DollarSign} label="Inventory Value" value={fmtMoney(data?.stats?.totalValue)} sub="at standard cost" accent="text-green-600 bg-green-50" />
             <StatCard icon={AlertTriangle} label="Low Stock Alerts" value={fmt(data?.stats?.lowStockCount)} sub={`${fmt(data?.stats?.todayMovements)} movements today`} accent="text-amber-600 bg-amber-50" />
+          </div>
+
+          {/* Supplier KPIs */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
+              <Store className="h-3.5 w-3.5" />
+              Supplier Overview
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <PickingCard icon={Store} label="Total Suppliers" value={fmt(data?.suppliers?.total)} sub="registered" accent="text-blue-600 bg-blue-50" />
+              <PickingCard icon={Users} label="Active" value={fmt(data?.suppliers?.active)} sub="usable on Receiving" accent="text-green-600 bg-green-50" />
+              <PickingCard icon={UserX} label="Inactive" value={fmt(data?.suppliers?.inactive)} sub="blocked from Receiving" accent="text-gray-600 bg-gray-100" />
+              <PickingCard icon={UserPlus} label="Added (30d)" value={fmt(data?.suppliers?.recentlyAdded)} sub="last 30 days" accent="text-purple-600 bg-purple-50" />
+            </div>
           </div>
 
           {/* Picking KPIs */}
