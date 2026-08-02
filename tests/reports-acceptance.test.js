@@ -558,6 +558,19 @@ describe('Audit Reports', () => {
   // TEST 3.1: Audit Trail Report
   // -----------------------------------------------------------------------
   test('Audit Trail: returns audit log entries', async () => {
+    // This file mocks logAudit, so seed one audit row directly to verify the
+    // report returns persisted entries on a clean test database.
+    const created = await prisma.auditLog.create({
+      data: {
+        userId: s.admin.id,
+        userName: s.admin.name,
+        action: 'TEST',
+        module: 'MASTER_ITEM',
+        entityType: 'Item',
+        description: 'Seeded for audit trail report test',
+      },
+    })
+
     const result = await getAuditReport('audit-trail', {})
 
     expect(result.data).toBeDefined()
@@ -570,6 +583,8 @@ describe('Audit Reports', () => {
     expect(row).toHaveProperty('action')
     expect(row).toHaveProperty('module')
     expect(row).toHaveProperty('userName')
+
+    await prisma.auditLog.delete({ where: { id: created.id } })
   })
 
   // -----------------------------------------------------------------------

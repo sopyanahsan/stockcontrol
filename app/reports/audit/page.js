@@ -21,6 +21,7 @@ const ACTION_COLORS = {
   CREATE: 'border-green-200 bg-green-50 text-green-700',
   UPDATE: 'border-blue-200 bg-blue-50 text-blue-700',
   DELETE: 'border-red-200 bg-red-50 text-red-700',
+  POST: 'border-purple-200 bg-purple-50 text-purple-700',
   LOGIN: 'border-purple-200 bg-purple-50 text-purple-700',
   LOGOUT: 'border-gray-200 bg-gray-50 text-gray-500',
   VIEW: 'border-gray-200 bg-gray-50 text-gray-400',
@@ -29,15 +30,53 @@ const ACTION_COLORS = {
   REJECT: 'border-orange-200 bg-orange-50 text-orange-700',
 }
 
+const MODULE_OPTIONS = [
+  'AUTH', 'MASTER_ITEM', 'MASTER_CATEGORY', 'MASTER_UOM', 'LOCATION', 'RECEIVING', 'PUTAWAY',
+  'MOVEMENT', 'ADJUSTMENT', 'CYCLE_COUNT', 'PICKING', 'PACKING', 'SHIPPING', 'STOCK_OPNAME',
+]
+
+function useFromDate(days) {
+  return useMemo(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - Number(days))
+    return d.toISOString().slice(0, 10)
+  }, [days])
+}
+
+function PeriodSelect({ value, onChange }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-gray-500">Period:</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs">
+        <option value="7">Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="60">Last 60 days</option>
+        <option value="90">Last 90 days</option>
+      </select>
+    </div>
+  )
+}
+
+function emptyKpis() {
+  return [
+    { label: '—', value: '—' },
+    { label: '—', value: '—' },
+    { label: '—', value: '—' },
+    { label: '—', value: '—' },
+  ]
+}
+
 function AuditTrailTab({ active }) {
   const [dateRange, setDateRange] = useState('30')
   const [module, setModule] = useState('')
   const [action, setAction] = useState('')
+  const fromDate = useFromDate(dateRange)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['reports', 'audit', 'trail', dateRange, module, action],
     queryFn: () => {
-      const params = new URLSearchParams({ days: dateRange })
+      const params = new URLSearchParams({ fromDate })
       if (module) params.set('module', module)
       if (action) params.set('action', action)
       return api(`/reports/audit/trail?${params.toString()}`)
@@ -45,23 +84,25 @@ function AuditTrailTab({ active }) {
     enabled: active,
   })
 
+  const rows = useMemo(() => data?.data || [], [data])
+
   const columns = useMemo(
     () => [
       {
         accessorKey: 'timestamp', header: 'Timestamp',
         cell: ({ row }) => (
           <span className="whitespace-nowrap text-xs text-gray-500">
-            {format(parseISO(row.original.timestamp), 'dd MMM yyyy HH:mm:ss')}
+            {row.original.timestamp ? format(parseISO(row.original.timestamp), 'dd MMM yyyy HH:mm:ss') : '—'}
           </span>
         ),
       },
       {
-        accessorKey: 'user', header: 'User',
-        accessorFn: (r) => r.user?.name || '',
+        id: 'user', header: 'User',
+        accessorFn: (r) => r.userName || '',
         cell: ({ row }) => (
           <div>
-            <div className="text-xs font-medium">{row.original.user?.name || 'System'}</div>
-            <div className="text-[10px] text-gray-400">{row.original.user?.email || ''}</div>
+            <div className="text-xs font-medium">{row.original.userName || 'System'}</div>
+            <div className="text-[10px] text-gray-400">{row.original.userEmail || ''}</div>
           </div>
         ),
       },
@@ -85,13 +126,7 @@ function AuditTrailTab({ active }) {
       },
       {
         accessorKey: 'entityId', header: 'Entity ID',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-gray-500">{row.original.entityId || '—'}</span>
-        ),
-      },
-      {
-        accessorKey: 'ipAddress', header: 'IP Address',
-        cell: ({ row }) => <span className="font-mono text-xs text-gray-500">{row.original.ipAddress || '—'}</span>,
+        cell: ({ row }) => <span className="font-mono text-xs text-gray-500">{row.original.entityId || '—'}</span>,
       },
       {
         accessorKey: 'description', header: 'Details',
@@ -105,57 +140,64 @@ function AuditTrailTab({ active }) {
     []
   )
 
-  const kpis = data
-    ? [
-        { label: 'Total Events', value: fmt(data.totalEvents || 0), description: 'In period', trend: null },
-        { label: 'Active Users', value: fmt(data.activeUsers || 0), description: 'Unique users', trend: null },
-        { label: 'Creates', value: fmt(data.creates || 0), description: 'New records', trend: null },
-        { label: 'Updates', value: fmt(data.updates || 0), description: 'Modified records', trend: null },
-      ]
-    : Array(4).fill({ label: '—', value: '—', description: '', trend: null })
+  const kpis = useMemo(() => {
+    if (!data) return emptyKpis()
+    const activeUsers = new Set(rows.map((r) => r.userId).filter(Boolean)).size
+    const creates = rows.filter((r) => r.action === 'CREATE').length
+    const updates = rows.filter((r) => r.action === 'UPDATE').length
+    return [
+      { label: 'Total Events', value: fmt(rows.length), sub: 'In period' },
+      { label: 'Active Users', value: fmt(activeUsers), sub: 'Unique users' },
+      { label: 'Creates', value: fmt(creates), sub: 'New records', accent: 'green' },
+      { label: 'Updates', value: fmt(updates), sub: 'Modified records', accent: 'blue' },
+    ]
+  }, [data, rows])
 
-  const trend = (data?.dailyTrend || []).map((d) => ({
-    date: format(parseISO(d.date), 'dd MMM'),
-    events: d.events,
-    creates: d.creates,
-    updates: d.updates,
-  }))
+  const trend = useMemo(() => {
+    const m = {}
+    for (const r of rows) {
+      if (!r.timestamp) continue
+      const key = String(r.timestamp).slice(0, 10)
+      if (!m[key]) m[key] = { events: 0, creates: 0, updates: 0 }
+      m[key].events++
+      if (r.action === 'CREATE') m[key].creates++
+      if (r.action === 'UPDATE') m[key].updates++
+    }
+    return Object.keys(m).sort().map((date) => ({ date: format(parseISO(date), 'dd MMM'), ...m[date] }))
+  }, [rows])
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <KPIGrid kpis={kpis} isLoading={isLoading} columns={4} />
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Period:</span>
-          <select value={dateRange} onChange={(e) => setDateRange(e.target.value)}
-            className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs">
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="60">Last 60 days</option>
-            <option value="90">Last 90 days</option>
-          </select>
+        <KPIGrid items={kpis} />
+        <div className="flex items-center gap-2 shrink-0">
+          <PeriodSelect value={dateRange} onChange={setDateRange} />
           <select value={module} onChange={(e) => setModule(e.target.value)}
             className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs">
             <option value="">All modules</option>
-            <option value="ITEMS">Master Items</option>
-            <option value="LOCATIONS">Locations</option>
-            <option value="RECEIVING">Receiving</option>
-            <option value="PUTAWAY">Putaway</option>
-            <option value="PICKING">Picking</option>
-            <option value="PACKING">Packing</option>
-            <option value="SHIPPING">Shipping</option>
-            <option value="MOVEMENT">Movement</option>
-            <option value="ADJUSTMENT">Adjustment</option>
-            <option value="CYCLE_COUNT">Cycle Count</option>
-            <option value="AUTH">Authentication</option>
+            {MODULE_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <select value={action} onChange={(e) => setAction(e.target.value)}
+            className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs">
+            <option value="">All actions</option>
+            <option value="CREATE">CREATE</option>
+            <option value="UPDATE">UPDATE</option>
+            <option value="DELETE">DELETE</option>
+            <option value="POST">POST</option>
+            <option value="APPROVE">APPROVE</option>
+            <option value="REJECT">REJECT</option>
+            <option value="LOGIN">LOGIN</option>
+            <option value="LOGOUT">LOGOUT</option>
           </select>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <ReportTable
           columns={columns}
-          data={data?.events || []}
+          data={rows}
           isLoading={isLoading}
+          error={error}
+          onRetry={refetch}
           searchPlaceholder="Search user, action, entity..."
           exportName="audit-trail"
           exportTitle="Audit Trail"
@@ -182,118 +224,88 @@ function AuditTrailTab({ active }) {
 
 function UserActivityTab({ active }) {
   const [dateRange, setDateRange] = useState('30')
+  const fromDate = useFromDate(dateRange)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['reports', 'audit', 'user-activity', dateRange],
-    queryFn: () => api(`/reports/audit/user-activity?days=${dateRange}`),
+    queryFn: () => api(`/reports/audit/user-activity?fromDate=${fromDate}`),
     enabled: active,
   })
+
+  const rows = useMemo(() => data?.data || [], [data])
+
+  const actionCount = (r, action) => r.byAction?.[action] || 0
 
   const columns = useMemo(
     () => [
       {
         id: 'user', header: 'User',
-        accessorFn: (r) => r.user?.name || '',
+        accessorFn: (r) => r.userName || '',
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-700">
-              {row.original.user?.name?.charAt(0) || '?'}
+              {row.original.userName?.charAt(0) || '?'}
             </div>
             <div>
-              <div className="text-xs font-medium">{row.original.user?.name || '—'}</div>
-              <div className="text-[10px] text-gray-400">{row.original.user?.email || ''}</div>
+              <div className="text-xs font-medium">{row.original.userName || '—'}</div>
+              <div className="text-[10px] text-gray-400">{row.original.userId || ''}</div>
             </div>
           </div>
         ),
       },
       {
-        id: 'role', header: 'Role',
-        accessorFn: (r) => r.user?.role || '',
-        cell: ({ row }) => (
-          <Badge variant="outline" className="text-[11px]">{row.original.user?.role || '—'}</Badge>
-        ),
-      },
-      {
-        accessorKey: 'totalEvents', header: 'Total Events',
-        cell: ({ row }) => <span className="tabular-nums font-medium">{fmt(row.original.totalEvents || 0)}</span>,
-      },
-      {
-        accessorKey: 'creates', header: 'Creates',
-        cell: ({ row }) => <span className="tabular-nums text-green-600">{fmt(row.original.creates || 0)}</span>,
-      },
-      {
-        accessorKey: 'updates', header: 'Updates',
-        cell: ({ row }) => <span className="tabular-nums text-blue-600">{fmt(row.original.updates || 0)}</span>,
-      },
-      {
-        accessorKey: 'deletes', header: 'Deletes',
-        cell: ({ row }) => <span className="tabular-nums text-red-600">{fmt(row.original.deletes || 0)}</span>,
-      },
-      {
-        accessorKey: 'logins', header: 'Logins',
-        cell: ({ row }) => <span className="tabular-nums text-purple-600">{fmt(row.original.logins || 0)}</span>,
-      },
-      {
-        accessorKey: 'lastActivity', header: 'Last Activity',
+        accessorKey: 'date', header: 'Date',
         cell: ({ row }) => (
           <span className="text-xs text-gray-500">
-            {row.original.lastActivity ? format(parseISO(row.original.lastActivity), 'dd MMM HH:mm') : '—'}
+            {row.original.date ? format(parseISO(row.original.date), 'dd MMM yyyy') : '—'}
           </span>
         ),
       },
-      {
-        id: 'modules', header: 'Modules Used',
-        accessorFn: (r) => (r.modulesUsed || []).join(', '),
-        cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1">
-            {(row.original.modulesUsed || []).slice(0, 3).map((m) => (
-              <span key={m} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px]">{m}</span>
-            ))}
-            {(row.original.modulesUsed || []).length > 3 && (
-              <span className="text-[10px] text-gray-400">+{(row.original.modulesUsed || []).length - 3}</span>
-            )}
-          </div>
-        ),
-      },
+      { accessorKey: 'totalActions', header: 'Total Actions', cell: ({ row }) => <span className="tabular-nums font-medium">{fmt(row.original.totalActions)}</span> },
+      { accessorKey: 'creates', header: 'Creates', accessorFn: (r) => actionCount(r, 'CREATE'), cell: ({ row }) => <span className="tabular-nums text-green-600">{fmt(actionCount(row.original, 'CREATE'))}</span> },
+      { accessorKey: 'updates', header: 'Updates', accessorFn: (r) => actionCount(r, 'UPDATE'), cell: ({ row }) => <span className="tabular-nums text-blue-600">{fmt(actionCount(row.original, 'UPDATE'))}</span> },
+      { accessorKey: 'deletes', header: 'Deletes', accessorFn: (r) => actionCount(r, 'DELETE'), cell: ({ row }) => <span className="tabular-nums text-red-600">{fmt(actionCount(row.original, 'DELETE'))}</span> },
+      { accessorKey: 'logins', header: 'Logins', accessorFn: (r) => actionCount(r, 'LOGIN') + actionCount(r, 'LOGOUT'), cell: ({ row }) => <span className="tabular-nums text-purple-600">{fmt(actionCount(row.original, 'LOGIN') + actionCount(row.original, 'LOGOUT'))}</span> },
     ],
     []
   )
 
-  const kpis = data
-    ? [
-        { label: 'Active Users', value: fmt(data.totalUsers || 0), description: 'In period', trend: null },
-        { label: 'Total Events', value: fmt(data.totalEvents || 0), description: 'All actions', trend: null },
-        { label: 'Avg Events/User', value: fmt(Math.round(data.avgEventsPerUser || 0)), description: 'Per user', trend: null },
-        { label: 'Most Active', value: data.mostActiveUser?.user?.name || '—', description: 'Top contributor', trend: null },
-      ]
-    : Array(4).fill({ label: '—', value: '—', description: '', trend: null })
+  const kpis = useMemo(() => {
+    if (!data) return emptyKpis()
+    const activeUsers = new Set(rows.map((r) => r.userId).filter(Boolean)).size
+    const totalEvents = rows.reduce((s, r) => s + (r.totalActions || 0), 0)
+    const avgPerUser = activeUsers ? Math.round(totalEvents / activeUsers) : 0
+    return [
+      { label: 'Active Users', value: fmt(activeUsers), sub: 'In period' },
+      { label: 'Total Events', value: fmt(totalEvents), sub: 'All actions' },
+      { label: 'Avg Events/User', value: fmt(avgPerUser), sub: 'Per user' },
+      { label: 'Active Days', value: fmt(rows.length), sub: 'User-day records' },
+    ]
+  }, [data, rows])
 
-  const topUsers = (data?.topUsers || []).map((u) => ({
-    name: u.user?.name || '—',
-    events: u.totalEvents || 0,
-  }))
+  const topUsers = useMemo(() => {
+    const byUser = {}
+    for (const r of rows) {
+      if (!byUser[r.userId]) byUser[r.userId] = { name: r.userName || '—', events: 0 }
+      byUser[r.userId].events += r.totalActions || 0
+    }
+    return Object.values(byUser).sort((a, b) => b.events - a.events).slice(0, 8)
+  }, [rows])
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <KPIGrid kpis={kpis} isLoading={isLoading} columns={4} />
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Period:</span>
-          <select value={dateRange} onChange={(e) => setDateRange(e.target.value)}
-            className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs">
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="60">Last 60 days</option>
-            <option value="90">Last 90 days</option>
-          </select>
-        </div>
+        <KPIGrid items={kpis} />
+        <div className="shrink-0"><PeriodSelect value={dateRange} onChange={setDateRange} /></div>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <ReportTable
           columns={columns}
-          data={data?.users || []}
+          data={rows}
           isLoading={isLoading}
-          searchPlaceholder="Search user name or email..."
+          error={error}
+          onRetry={refetch}
+          searchPlaceholder="Search user..."
           exportName="user-activity"
           exportTitle="User Activity"
           pageSize={20}
@@ -301,10 +313,10 @@ function UserActivityTab({ active }) {
         <ChartCard title="Top Users by Activity" subtitle="Events per user" className="lg:col-span-1">
           {isLoading ? <Skeleton className="h-56 w-full" /> : (
             <ResponsiveContainer width="100%" height={224}>
-              <BarChart data={topUsers.slice(0, 8)} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 0 }}>
+              <BarChart data={topUsers} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                <YAxis dataKey="name" type="category" width={90} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                 <Tooltip formatter={(v) => [fmt(v), 'Events']} contentStyle={{ borderRadius: 6, fontSize: 12 }} />
                 <Bar dataKey="events" fill="#7c3aed" radius={[0, 3, 3, 0]} maxBarSize={20} />
               </BarChart>
@@ -320,20 +332,34 @@ function InventoryHistoryTab({ active }) {
   const [dateRange, setDateRange] = useState('30')
   const [itemId, setItemId] = useState('')
   const [locationId, setLocationId] = useState('')
+  const fromDate = useFromDate(dateRange)
 
-  const buildUrl = () => {
-    const params = new URLSearchParams({ days: dateRange })
-    if (itemId) params.set('itemId', itemId)
-    if (locationId) params.set('locationId', locationId)
-    return `/reports/audit/inventory-history?${params.toString()}`
-  }
+  const { data: stockRows = [] } = useQuery({ queryKey: ['stock'], queryFn: () => api('/stock') })
 
-  const { data, isLoading } = useQuery({
+  const itemOptions = useMemo(() => {
+    const m = new Map()
+    for (const r of stockRows) if (r.itemId) m.set(r.itemId, r.item?.sku || '—')
+    return [...m.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label))
+  }, [stockRows])
+
+  const locationOptions = useMemo(() => {
+    const m = new Map()
+    for (const r of stockRows) if (r.locationId) m.set(r.locationId, r.location?.code || '—')
+    return [...m.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label))
+  }, [stockRows])
+
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['reports', 'audit', 'inventory-history', dateRange, itemId, locationId],
-    queryFn: () => api(buildUrl()),
+    queryFn: () => {
+      const params = new URLSearchParams({ fromDate })
+      if (itemId) params.set('itemId', itemId)
+      if (locationId) params.set('locationId', locationId)
+      return api(`/reports/audit/inventory-history?${params.toString()}`)
+    },
     enabled: active,
   })
 
+  const rows = useMemo(() => data?.data || [], [data])
   const hasFilters = !!(itemId || locationId)
 
   const columns = useMemo(
@@ -342,38 +368,42 @@ function InventoryHistoryTab({ active }) {
         accessorKey: 'timestamp', header: 'Timestamp',
         cell: ({ row }) => (
           <span className="whitespace-nowrap text-xs text-gray-500">
-            {format(parseISO(row.original.timestamp), 'dd MMM yyyy HH:mm:ss')}
+            {row.original.timestamp ? format(parseISO(row.original.timestamp), 'dd MMM yyyy HH:mm:ss') : '—'}
           </span>
         ),
       },
       {
         id: 'item', header: 'Item',
-        accessorFn: (r) => r.item?.sku || '',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.item?.sku || '—'}</span>,
+        accessorFn: (r) => r.itemSku || '',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.itemSku || '—'}</span>,
       },
       {
         id: 'location', header: 'Location',
-        accessorFn: (r) => r.location?.code || '',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.location?.code || '—'}</span>,
+        accessorFn: (r) => r.locationCode || '',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.locationCode || '—'}</span>,
       },
       {
-        accessorKey: 'previousQty', header: 'Previous Qty',
-        cell: ({ row }) => <span className="tabular-nums text-xs text-gray-500">{fmt(row.original.previousQty)}</span>,
-      },
-      {
-        accessorKey: 'newQty', header: 'New Qty',
-        cell: ({ row }) => <span className="tabular-nums font-medium">{fmt(row.original.newQty)}</span>,
-      },
-      {
-        id: 'change', header: 'Change',
+        accessorKey: 'qty', header: 'Qty Change',
         cell: ({ row }) => {
-          const c = (row.original.newQty || 0) - (row.original.previousQty || 0)
+          const c = row.original.qty || 0
           return (
             <span className={`tabular-nums font-medium ${c > 0 ? 'text-green-600' : c < 0 ? 'text-red-600' : 'text-gray-400'}`}>
               {c > 0 ? '+' : ''}{fmt(c)}
             </span>
           )
         },
+      },
+      {
+        accessorKey: 'runningBalance', header: 'Running Balance',
+        cell: ({ row }) => <span className="tabular-nums font-medium">{fmt(row.original.runningBalance)}</span>,
+      },
+      {
+        accessorKey: 'unitCost', header: 'Unit Cost',
+        cell: ({ row }) => (
+          <span className="tabular-nums text-xs text-gray-500">
+            {row.original.unitCost != null ? `$${Number(row.original.unitCost).toFixed(4)}` : '—'}
+          </span>
+        ),
       },
       {
         accessorKey: 'txnType', header: 'Transaction',
@@ -386,13 +416,12 @@ function InventoryHistoryTab({ active }) {
         cell: ({ row }) => <span className="font-mono text-xs text-gray-500">{row.original.refNumber || '—'}</span>,
       },
       {
-        accessorKey: 'reason', header: 'Reason',
-        cell: ({ row }) => <span className="text-xs text-gray-500">{row.original.reason || '—'}</span>,
+        accessorKey: 'reasonCode', header: 'Reason',
+        cell: ({ row }) => <span className="text-xs text-gray-500">{row.original.reasonCode || '—'}</span>,
       },
       {
         accessorKey: 'user', header: 'User',
-        accessorFn: (r) => r.user?.name || '',
-        cell: ({ row }) => <span className="text-xs">{row.original.user?.name || '—'}</span>,
+        cell: ({ row }) => <span className="text-xs">{row.original.user || '—'}</span>,
       },
     ],
     []
@@ -400,42 +429,41 @@ function InventoryHistoryTab({ active }) {
 
   const clearFilters = () => { setItemId(''); setLocationId('') }
 
-  const kpis = data
-    ? [
-        { label: 'Total Changes', value: fmt(data.totalChanges || 0), description: 'In period', trend: null },
-        { label: 'Positive', value: fmt(data.positiveChanges || 0), description: 'Qty increased', trend: null },
-        { label: 'Negative', value: fmt(data.negativeChanges || 0), description: 'Qty decreased', trend: null },
-        { label: 'Net Change', value: fmt((data.positiveChanges || 0) - (data.negativeChanges || 0)), description: 'Net qty change', trend: null },
-      ]
-    : Array(4).fill({ label: '—', value: '—', description: '', trend: null })
+  const kpis = useMemo(() => {
+    if (!data) return emptyKpis()
+    const positive = rows.reduce((s, r) => s + (r.qty > 0 ? r.qty : 0), 0)
+    const negative = rows.reduce((s, r) => s + (r.qty < 0 ? Math.abs(r.qty) : 0), 0)
+    const net = rows.reduce((s, r) => s + (r.qty || 0), 0)
+    return [
+      { label: 'Total Changes', value: fmt(rows.length), sub: 'In period' },
+      { label: 'Positive', value: fmt(Math.round(positive * 100) / 100), sub: 'Qty increased', accent: 'green' },
+      { label: 'Negative', value: fmt(Math.round(negative * 100) / 100), sub: 'Qty decreased', accent: 'red' },
+      { label: 'Net Change', value: fmt(Math.round(net * 100) / 100), sub: 'Net qty change' },
+    ]
+  }, [data, rows])
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <KPIGrid kpis={kpis} isLoading={isLoading} columns={4} />
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Period:</span>
-          <select value={dateRange} onChange={(e) => setDateRange(e.target.value)}
-            className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs">
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="60">Last 60 days</option>
-            <option value="90">Last 90 days</option>
-          </select>
-        </div>
+        <KPIGrid items={kpis} />
+        <div className="shrink-0"><PeriodSelect value={dateRange} onChange={setDateRange} /></div>
       </div>
       <div className="flex flex-wrap items-center gap-2 rounded-md border border-gray-200 bg-gray-50 p-3">
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-gray-500">Item:</span>
-          <input type="text" value={itemId} onChange={(e) => setItemId(e.target.value)}
-            placeholder="Item ID"
-            className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs w-36" />
+          <select value={itemId} onChange={(e) => setItemId(e.target.value)}
+            className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs">
+            <option value="">All items</option>
+            {itemOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-gray-500">Location:</span>
-          <input type="text" value={locationId} onChange={(e) => setLocationId(e.target.value)}
-            placeholder="Location ID"
-            className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs w-36" />
+          <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
+            className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs">
+            <option value="">All locations</option>
+            {locationOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
         </div>
         {hasFilters && (
           <button onClick={clearFilters} className="text-xs text-blue-600 hover:underline">Clear filters</button>
@@ -443,8 +471,10 @@ function InventoryHistoryTab({ active }) {
       </div>
       <ReportTable
         columns={columns}
-        data={data?.entries || []}
+        data={rows}
         isLoading={isLoading}
+        error={error}
+        onRetry={refetch}
         searchPlaceholder="Search item, location, reference..."
         exportName="inventory-history"
         exportTitle="Inventory History"

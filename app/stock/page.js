@@ -17,6 +17,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 const fmt = (n) => new Intl.NumberFormat('en-US').format(n || 0)
 
+const ALL_VALUE = '__ALL__'
+
 const TXN_COLORS = {
   RECEIVING: 'border-green-200 bg-green-50 text-green-700',
   PUTAWAY: 'border-blue-200 bg-blue-50 text-blue-700',
@@ -44,8 +46,8 @@ function CardTab() {
   const buildUrl = () => {
     const params = new URLSearchParams()
     if (selectedItemId) params.set('itemId', selectedItemId)
-    if (selectedLocationId) params.set('locationId', selectedLocationId)
-    if (selectedTxnType) params.set('txnType', selectedTxnType)
+    if (selectedLocationId && selectedLocationId !== ALL_VALUE) params.set('locationId', selectedLocationId)
+    if (selectedTxnType && selectedTxnType !== ALL_VALUE) params.set('txnType', selectedTxnType)
     if (fromDate) params.set('fromDate', fromDate)
     if (toDate) params.set('toDate', toDate)
     return `/stock-card-entries?${params.toString()}`
@@ -54,10 +56,10 @@ function CardTab() {
   const { data: cardData, isLoading: cardLoading } = useQuery({
     queryKey: ['stock-card-entries', selectedItemId, selectedLocationId, selectedTxnType, fromDate, toDate],
     queryFn: () => api(buildUrl()),
-    enabled: !!(selectedItemId || selectedLocationId || selectedTxnType || fromDate || toDate),
+    enabled: !!(selectedItemId || (selectedLocationId && selectedLocationId !== ALL_VALUE) || (selectedTxnType && selectedTxnType !== ALL_VALUE) || fromDate || toDate),
   })
 
-  const hasFilters = !!(selectedItemId || selectedLocationId || selectedTxnType || fromDate || toDate)
+  const hasFilters = !!(selectedItemId || (selectedLocationId && selectedLocationId !== ALL_VALUE) || (selectedTxnType && selectedTxnType !== ALL_VALUE) || fromDate || toDate)
 
   const cardColumns = useMemo(
     () => [
@@ -170,7 +172,7 @@ function CardTab() {
               <SelectValue placeholder="All" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="" className="text-xs">All locations</SelectItem>
+              <SelectItem value={ALL_VALUE} className="text-xs">All locations</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -182,7 +184,7 @@ function CardTab() {
               <SelectValue placeholder="All types" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="" className="text-xs">All types</SelectItem>
+              <SelectItem value={ALL_VALUE} className="text-xs">All types</SelectItem>
               <SelectItem value="RECEIVING" className="text-xs">Receiving</SelectItem>
               <SelectItem value="PUTAWAY" className="text-xs">Putaway</SelectItem>
               <SelectItem value="TRANSFER_IN" className="text-xs">Transfer In</SelectItem>
@@ -215,7 +217,7 @@ function CardTab() {
           />
         </div>
 
-        {(selectedItemId || selectedLocationId || selectedTxnType || fromDate || toDate) && (
+        {hasFilters && (
           <button
             onClick={clearFilters}
             className="text-xs text-blue-600 hover:underline"

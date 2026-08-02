@@ -9,17 +9,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ReportLayout } from '@/components/reports/ReportLayout'
 import { ReportHeader } from '@/components/reports/ReportHeader'
 import { ChartCard } from '@/components/reports/ChartCard'
-import { ExportButton } from '@/components/reports/ExportButton'
 import { KPIGrid } from '@/components/reports/KPIGrid'
 import { ReportTable } from '@/components/reports/ReportTable'
-import { ReportChart } from '@/components/reports/ReportChart'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts'
 import { format, parseISO } from 'date-fns'
 
 const fmt = (n) => new Intl.NumberFormat('en-US').format(n || 0)
-const pct = (n) => (n != null ? `${(n * 100).toFixed(1)}%` : '—')
 
 const ZONE_COLORS = ['#2563eb', '#7c3aed', '#db2777', '#d97706', '#16a34a', '#0891b2', '#dc2626', '#65a30d']
 
@@ -34,37 +31,38 @@ function StockOnHandTab({ active }) {
     enabled: active,
   })
 
+  const rows = useMemo(() => data?.data || [], [data])
+
   const filtered = useMemo(() => {
-    if (!data?.items) return []
     const q = search.toLowerCase()
-    return data.items.filter(
+    return rows.filter(
       (r) =>
-        r.item?.sku?.toLowerCase().includes(q) ||
-        r.item?.name?.toLowerCase().includes(q) ||
-        r.location?.code?.toLowerCase().includes(q)
+        String(r.sku || '').toLowerCase().includes(q) ||
+        String(r.name || '').toLowerCase().includes(q) ||
+        String(r.locationCode || '').toLowerCase().includes(q)
     )
-  }, [data, search])
+  }, [rows, search])
 
   const columns = useMemo(
     () => [
       {
         id: 'sku',
         header: 'SKU',
-        accessorFn: (r) => r.item?.sku || '',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.item?.sku}</span>,
+        accessorFn: (r) => r.sku || '',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.sku || '—'}</span>,
       },
-      { id: 'name', header: 'Item Name', accessorFn: (r) => r.item?.name || '' },
+      { id: 'name', header: 'Item Name', accessorFn: (r) => r.name || '', cell: ({ row }) => <span className="text-xs">{row.original.name || '—'}</span> },
       {
         id: 'category', header: 'Category',
-        accessorFn: (r) => r.item?.category || '',
+        accessorFn: (r) => r.category || '',
         cell: ({ row }) => (
-          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{row.original.item?.category || '—'}</span>
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{row.original.category || '—'}</span>
         ),
       },
       {
         id: 'location', header: 'Location',
-        accessorFn: (r) => r.location?.code || '',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.location?.code}</span>,
+        accessorFn: (r) => r.locationCode || '',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.locationCode || '—'}</span>,
       },
       {
         id: 'qty', header: 'Qty on Hand',
@@ -75,26 +73,24 @@ function StockOnHandTab({ active }) {
       },
       {
         id: 'uom', header: 'UoM',
-        accessorFn: (r) => r.item?.uom || '',
-        cell: ({ row }) => <span className="text-xs text-gray-500">{row.original.item?.uom}</span>,
+        accessorFn: (r) => r.uom || '',
+        cell: ({ row }) => <span className="text-xs text-gray-500">{row.original.uom || '—'}</span>,
       },
       {
         id: 'value', header: 'Value at Cost',
-        accessorFn: (r) => r.qty * (r.item?.unitCost || 0),
+        accessorFn: (r) => r.totalValue || 0,
         cell: ({ row }) => (
-          <span className="tabular-nums text-gray-700">${fmt(Math.round(row.original.qty * (row.original.item?.unitCost || 0)))}</span>
+          <span className="tabular-nums text-gray-700">${fmt(Math.round(row.original.totalValue || 0))}</span>
         ),
       },
       {
         id: 'reorder', header: 'Reorder Level',
-        accessorFn: (r) => r.item?.reorderLevel || 0,
+        accessorFn: (r) => r.reorderPoint || 0,
         cell: ({ row }) => {
-          const qty = row.original.qty
-          const level = row.original.item?.reorderLevel || 0
-          const below = qty < level
+          const below = row.original.isLowStock
           return (
             <Badge variant="outline" className={`${below ? 'border-red-200 bg-red-50 text-red-600' : 'border-gray-200'} text-[11px]`}>
-              {fmt(level)}
+              {fmt(row.original.reorderPoint || 0)}
             </Badge>
           )
         },
@@ -103,22 +99,31 @@ function StockOnHandTab({ active }) {
     []
   )
 
-  const kpis = data
-    ? [
-        { label: 'Total SKUs', value: fmt(data.totalSKUs), description: 'Items with stock', trend: null },
-        { label: 'Total Qty', value: fmt(data.totalQty), description: 'Units on hand', trend: null },
-        { label: 'Total Value', value: `$${fmt(Math.round(data.totalValue || 0))}`, description: 'At unit cost', trend: null },
-        { label: 'Below Reorder', value: fmt(data.belowReorder || 0), description: 'Need replenishment', trend: null, accent: 'warning' },
-      ]
-    : Array(4).fill({ label: '—', value: '—', description: '', trend: null })
+  const kpis = useMemo(() => {
+    if (!data) return Array(4).fill({ label: '—', value: '—', description: '', trend: null })
+    const totalQty = rows.reduce((s, r) => s + (r.qty || 0), 0)
+    const totalValue = rows.reduce((s, r) => s + (r.totalValue || 0), 0)
+    const belowReorder = rows.filter((r) => r.isLowStock).length
+    return [
+      { label: 'Total SKUs', value: fmt(rows.length), sub: 'Items with stock' },
+      { label: 'Total Qty', value: fmt(totalQty), sub: 'Units on hand' },
+      { label: 'Total Value', value: `$${fmt(Math.round(totalValue))}`, sub: 'At unit cost' },
+      { label: 'Below Reorder', value: fmt(belowReorder), sub: 'Need replenishment', accent: 'amber' },
+    ]
+  }, [data, rows])
 
-  const zoneData = data?.byZone
-    ? Object.entries(data.byZone).map(([zone, v]) => ({ zone, qty: v.qty, value: v.value }))
-    : []
+  const zoneData = useMemo(() => {
+    const m = {}
+    for (const r of rows) {
+      const zone = r.zone || '—'
+      m[zone] = (m[zone] || 0) + (r.qty || 0)
+    }
+    return Object.entries(m).map(([zone, qty]) => ({ zone, qty }))
+  }, [rows])
 
   return (
     <div className="space-y-4">
-      <KPIGrid kpis={kpis} isLoading={isLoading} columns={4} />
+      <KPIGrid items={kpis} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <ReportTable
           columns={columns}
@@ -185,30 +190,28 @@ function StockCardTab({ active }) {
   const { data, isLoading } = useQuery({
     queryKey: ['reports', 'inventory', 'stock-card', itemId, locationId, fromDate, toDate],
     queryFn: () => api(buildUrl()),
-    enabled: active && !!(itemId || locationId || fromDate || toDate),
+    enabled: active && !!itemId,
   })
 
   const hasFilters = !!(itemId || locationId || fromDate || toDate)
 
+  const entries = useMemo(() => data?.data || [], [data])
+  const currentBalance = useMemo(() => (entries.length ? entries[entries.length - 1].balance : null), [entries])
+
   const columns = useMemo(
     () => [
       {
-        accessorKey: 'createdAt', header: 'Timestamp',
+        accessorKey: 'date', header: 'Timestamp',
         cell: ({ row }) => (
           <span className="whitespace-nowrap text-xs text-gray-500">
-            {format(parseISO(row.original.createdAt), 'dd MMM yyyy HH:mm:ss')}
+            {format(parseISO(row.original.date), 'dd MMM yyyy HH:mm:ss')}
           </span>
         ),
       },
       {
-        accessorKey: 'location',
-        header: 'Location',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.location?.code || '—'}</span>,
-      },
-      {
-        accessorKey: 'item',
-        header: 'Item',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.item?.sku || '—'}</span>,
+        id: 'location', header: 'Location',
+        accessorFn: (r) => r.locationCode || '',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.locationCode || '—'}</span>,
       },
       {
         accessorKey: 'txnType', header: 'Transaction',
@@ -225,9 +228,11 @@ function StockCardTab({ active }) {
         ),
       },
       {
-        accessorKey: 'runningQty', header: 'Running Balance',
+        accessorKey: 'balance', header: 'Running Balance',
         cell: ({ row }) => (
-          <span className="tabular-nums font-medium">{fmt(row.original.runningQty)}</span>
+          <span className={`tabular-nums font-medium ${row.original.balance >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
+            {fmt(row.original.balance)}
+          </span>
         ),
       },
       {
@@ -243,9 +248,14 @@ function StockCardTab({ active }) {
         cell: ({ row }) => <span className="font-mono text-xs text-gray-500">{row.original.refNumber || '—'}</span>,
       },
       {
-        accessorKey: 'user', header: 'User',
-        accessorFn: (r) => r.user?.name || '',
-        cell: ({ row }) => <span className="text-xs">{row.original.user?.name || '—'}</span>,
+        id: 'reason', header: 'Reason',
+        accessorFn: (r) => r.reasonCode || '',
+        cell: ({ row }) => <span className="text-xs text-gray-500">{row.original.reasonCode || '—'}</span>,
+      },
+      {
+        id: 'user', header: 'User',
+        accessorFn: (r) => r.user || '',
+        cell: ({ row }) => <span className="text-xs">{row.original.user || '—'}</span>,
       },
     ],
     []
@@ -289,20 +299,20 @@ function StockCardTab({ active }) {
         {hasFilters && (
           <button onClick={clearFilters} className="text-xs text-blue-600 hover:underline">Clear filters</button>
         )}
-        {data?.currentBalance != null && (
+        {currentBalance != null && (
           <Badge variant="outline" className="ml-auto border-blue-200 bg-blue-50 text-xs">
-            Running Balance: <strong className="tabular-nums">{fmt(data.currentBalance)}</strong>
+            Running Balance: <strong className="tabular-nums">{fmt(currentBalance)}</strong>
           </Badge>
         )}
       </div>
       {!hasFilters ? (
         <div className="rounded-md border border-dashed border-gray-300 bg-white py-16 text-center">
-          <div className="text-sm text-gray-500">Apply at least one filter to view ledger entries</div>
+          <div className="text-sm text-gray-500">Select an item to view its stock card</div>
         </div>
       ) : (
         <ReportTable
           columns={columns}
-          data={data?.entries || []}
+          data={entries}
           isLoading={isLoading}
           exportName="stock-card"
           exportTitle="Stock Card"
@@ -323,27 +333,29 @@ function InventoryAgingTab({ active }) {
     enabled: active,
   })
 
+  const rows = useMemo(() => data?.data || [], [data])
+
   const columns = useMemo(
     () => [
       {
         id: 'sku', header: 'SKU',
-        accessorFn: (r) => r.item?.sku || '',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.item?.sku}</span>,
+        accessorFn: (r) => r.sku || '',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.sku || '—'}</span>,
       },
-      { id: 'name', header: 'Item Name', accessorFn: (r) => r.item?.name || '' },
+      { id: 'name', header: 'Item Name', accessorFn: (r) => r.name || '', cell: ({ row }) => <span className="text-xs">{row.original.name || '—'}</span> },
       {
         id: 'location', header: 'Location',
-        accessorFn: (r) => r.location?.code || '',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.location?.code}</span>,
+        accessorFn: (r) => r.locationCode || '',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.locationCode || '—'}</span>,
       },
       {
         accessorKey: 'qty', header: 'Qty',
         cell: ({ row }) => <span className="tabular-nums font-medium">{fmt(row.original.qty)}</span>,
       },
       {
-        accessorKey: 'daysInStock', header: 'Days in Stock',
+        accessorKey: 'daysSinceActivity', header: 'Days in Stock',
         cell: ({ row }) => {
-          const d = row.original.daysInStock
+          const d = row.original.daysSinceActivity
           return (
             <Badge
               variant="outline"
@@ -359,10 +371,10 @@ function InventoryAgingTab({ active }) {
         },
       },
       {
-        accessorKey: 'lastTxnDate', header: 'Last Activity',
+        accessorKey: 'lastActivityDate', header: 'Last Activity',
         cell: ({ row }) => (
           <span className="text-xs text-gray-500">
-            {row.original.lastTxnDate ? format(parseISO(row.original.lastTxnDate), 'dd MMM yyyy') : '—'}
+            {row.original.lastActivityDate ? format(parseISO(row.original.lastActivityDate), 'dd MMM yyyy') : '—'}
           </span>
         ),
       },
@@ -376,38 +388,42 @@ function InventoryAgingTab({ active }) {
       },
       {
         id: 'value', header: 'Value',
-        accessorFn: (r) => r.qty * (r.unitCost || 0),
+        accessorFn: (r) => r.totalValue || 0,
         cell: ({ row }) => (
-          <span className="tabular-nums text-gray-700">${fmt(Math.round(row.original.qty * (row.original.unitCost || 0)))}</span>
+          <span className="tabular-nums text-gray-700">${fmt(Math.round(row.original.totalValue || 0))}</span>
         ),
       },
     ],
     []
   )
 
-  const ageBuckets = data?.ageBuckets
-    ? [
-        { bucket: '0–30 days', qty: data.ageBuckets['0-30'] || 0, color: '#16a34a' },
-        { bucket: '31–60 days', qty: data.ageBuckets['31-60'] || 0, color: '#2563eb' },
-        { bucket: '61–90 days', qty: data.ageBuckets['61-90'] || 0, color: '#d97706' },
-        { bucket: '91–180 days', qty: data.ageBuckets['91-180'] || 0, color: '#db2777' },
-        { bucket: '180+ days', qty: data.ageBuckets['180+'] || 0, color: '#dc2626' },
-      ]
-    : []
+  const ageBuckets = useMemo(() => {
+    const summary = data?.summary?.buckets || []
+    return summary.map((b) => {
+      const key = String(b.label || '')
+      const color = key.startsWith('0-') ? '#16a34a' : key.startsWith('31-') ? '#2563eb' : key.startsWith('61-') ? '#d97706' : key.startsWith('91-') ? '#db2777' : '#dc2626'
+      return { bucket: key.replace('-9999', '+').replace('-', '–'), qty: b.qty || 0, color }
+    })
+  }, [data])
 
-  const kpis = data
-    ? [
-        { label: 'Total Items', value: fmt(data.totalItems), description: 'Stock items tracked', trend: null },
-        { label: 'Total Value', value: `$${fmt(Math.round(data.totalValue || 0))}`, description: 'At unit cost', trend: null },
-        { label: 'Avg Age', value: `${data.avgAgeDays || 0}d`, description: 'Average days in stock', trend: null },
-        { label: 'Stale Stock', value: fmt(data.staleItems || 0), description: '> 180 days', trend: null, accent: 'warning' },
-      ]
-    : Array(4).fill({ label: '—', value: '—', description: '', trend: null })
+  const kpis = useMemo(() => {
+    if (!data) return Array(4).fill({ label: '—', value: '—', description: '', trend: null })
+    const totalItems = rows.length
+    const totalValue = rows.reduce((s, r) => s + (r.totalValue || 0), 0)
+    const avgAgeDays = totalItems ? Math.round(rows.reduce((s, r) => s + (r.daysSinceActivity || 0), 0) / totalItems) : 0
+    const staleItems = rows.filter((r) => (r.daysSinceActivity || 0) > 180).length
+    return [
+      { label: 'Total Items', value: fmt(totalItems), sub: 'Stock items tracked' },
+      { label: 'Total Value', value: `$${fmt(Math.round(totalValue))}`, sub: 'At unit cost' },
+      { label: 'Avg Age', value: `${avgAgeDays}d`, sub: 'Average days in stock' },
+      { label: 'Stale Stock', value: fmt(staleItems), sub: '> 180 days', accent: 'amber' },
+    ]
+  }, [data, rows])
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <KPIGrid kpis={kpis} isLoading={isLoading} columns={4} />
+        <KPIGrid items={kpis} />
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-xs text-gray-500">Period:</span>
           <select
@@ -426,7 +442,7 @@ function InventoryAgingTab({ active }) {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <ReportTable
           columns={columns}
-          data={data?.items || []}
+          data={rows}
           isLoading={isLoading}
           searchPlaceholder="Search SKU, item..."
           exportName="inventory-aging"
@@ -465,32 +481,35 @@ function FIFOAgingTab({ active }) {
     enabled: active,
   })
 
+  const rows = useMemo(() => data?.data || [], [data])
+
   const columns = useMemo(
     () => [
       {
         id: 'sku', header: 'SKU',
-        accessorFn: (r) => r.item?.sku || '',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.item?.sku}</span>,
+        accessorFn: (r) => r.sku || '',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.sku || '—'}</span>,
       },
-      { id: 'name', header: 'Item Name', accessorFn: (r) => r.item?.name || '' },
+      { id: 'name', header: 'Item Name', accessorFn: (r) => r.name || '', cell: ({ row }) => <span className="text-xs">{row.original.name || '—'}</span> },
       {
-        id: 'batch', header: 'Batch/Lot',
-        accessorFn: (r) => r.batchNumber || '',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.batchNumber || '—'}</span>,
-      },
-      {
-        accessorKey: 'location', header: 'Location',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.location?.code || '—'}</span>,
+        id: 'batch', header: 'Reference',
+        accessorFn: (r) => r.refNumber || '',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.refNumber || '—'}</span>,
       },
       {
-        accessorKey: 'qty', header: 'Qty',
-        cell: ({ row }) => <span className="tabular-nums font-medium">{fmt(row.original.qty)}</span>,
+        id: 'location', header: 'Location',
+        accessorFn: (r) => r.locationCode || '',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.locationCode || '—'}</span>,
       },
       {
-        accessorKey: 'receivedDate', header: 'Received Date',
+        accessorKey: 'qtyRemaining', header: 'Qty',
+        cell: ({ row }) => <span className="tabular-nums font-medium">{fmt(row.original.qtyRemaining)}</span>,
+      },
+      {
+        accessorKey: 'receivedAt', header: 'Received Date',
         cell: ({ row }) => (
           <span className="text-xs text-gray-500">
-            {row.original.receivedDate ? format(parseISO(row.original.receivedDate), 'dd MMM yyyy') : '—'}
+            {row.original.receivedAt ? format(parseISO(row.original.receivedAt), 'dd MMM yyyy') : '—'}
           </span>
         ),
       },
@@ -509,23 +528,10 @@ function FIFOAgingTab({ active }) {
         },
       },
       {
-        accessorKey: 'expiryDate', header: 'Expiry Date',
-        cell: ({ row }) => {
-          if (!row.original.expiryDate) return <span className="text-xs text-gray-400">—</span>
-          const d = parseISO(row.original.expiryDate)
-          const expiring = d < new Date(Date.now() + 30 * 86400000)
-          return (
-            <Badge variant="outline" className={`text-[11px] ${expiring ? 'border-red-200 bg-red-50 text-red-600' : 'border-gray-200'}`}>
-              {format(d, 'dd MMM yyyy')}
-            </Badge>
-          )
-        },
-      },
-      {
         id: 'value', header: 'Value',
-        accessorFn: (r) => r.qty * (r.unitCost || 0),
+        accessorFn: (r) => r.totalValue || 0,
         cell: ({ row }) => (
-          <span className="tabular-nums text-gray-700">${fmt(Math.round(row.original.qty * (row.original.unitCost || 0)))}</span>
+          <span className="tabular-nums text-gray-700">${fmt(Math.round(row.original.totalValue || 0))}</span>
         ),
       },
     ],
@@ -552,7 +558,7 @@ function FIFOAgingTab({ active }) {
       </div>
       <ReportTable
         columns={columns}
-        data={data?.items || []}
+        data={rows}
         isLoading={isLoading}
         searchPlaceholder="Search SKU, batch, location..."
         exportName="fifo-aging"
@@ -573,49 +579,52 @@ function DeadStockTab({ active }) {
     enabled: active,
   })
 
+  const rows = useMemo(() => data?.data || [], [data])
+
   const columns = useMemo(
     () => [
       {
         id: 'sku', header: 'SKU',
-        accessorFn: (r) => r.item?.sku || '',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.item?.sku}</span>,
+        accessorFn: (r) => r.sku || '',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.sku || '—'}</span>,
       },
-      { id: 'name', header: 'Item Name', accessorFn: (r) => r.item?.name || '' },
+      { id: 'name', header: 'Item Name', accessorFn: (r) => r.name || '', cell: ({ row }) => <span className="text-xs">{row.original.name || '—'}</span> },
       {
         id: 'category', header: 'Category',
-        accessorFn: (r) => r.item?.category || '',
-        cell: ({ row }) => <span className="text-xs text-gray-500">{row.original.item?.category || '—'}</span>,
+        accessorFn: (r) => r.category || '',
+        cell: ({ row }) => <span className="text-xs text-gray-500">{row.original.category || '—'}</span>,
       },
       {
-        accessorKey: 'location', header: 'Location',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.location?.code || '—'}</span>,
+        id: 'location', header: 'Location',
+        accessorFn: (r) => r.locations || '',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.locations || '—'}</span>,
       },
       {
-        accessorKey: 'qty', header: 'Qty',
-        cell: ({ row }) => <span className="tabular-nums font-medium">{fmt(row.original.qty)}</span>,
+        accessorKey: 'totalQty', header: 'Qty',
+        cell: ({ row }) => <span className="tabular-nums font-medium">{fmt(row.original.totalQty)}</span>,
       },
       {
-        accessorKey: 'lastMovementDate', header: 'Last Movement',
+        accessorKey: 'lastActivityDate', header: 'Last Movement',
         cell: ({ row }) => (
           <span className="text-xs text-gray-500">
-            {row.original.lastMovementDate ? format(parseISO(row.original.lastMovementDate), 'dd MMM yyyy') : '—'}
+            {row.original.lastActivityDate ? format(parseISO(row.original.lastActivityDate), 'dd MMM yyyy') : '—'}
           </span>
         ),
       },
       {
-        accessorKey: 'daysSinceMovement', header: 'Days Idle',
+        accessorKey: 'daysInactive', header: 'Days Idle',
         cell: ({ row }) => (
           <Badge variant="outline" className="border-red-200 bg-red-50 text-red-600 text-[11px]">
-            {row.original.daysSinceMovement || 0} days
+            {row.original.daysInactive || 0} days
           </Badge>
         ),
       },
       {
         id: 'value', header: 'Tied-up Value',
-        accessorFn: (r) => r.qty * (r.unitCost || 0),
+        accessorFn: (r) => r.totalValue || 0,
         cell: ({ row }) => (
           <span className="tabular-nums font-medium text-red-600">
-            ${fmt(Math.round(row.original.qty * (row.original.unitCost || 0)))}
+            ${fmt(Math.round(row.original.totalValue || 0))}
           </span>
         ),
       },
@@ -623,19 +632,27 @@ function DeadStockTab({ active }) {
     []
   )
 
-  const kpis = data
-    ? [
-        { label: 'Dead Stock Items', value: fmt(data.totalItems || 0), description: 'No movement > threshold', trend: null, accent: 'warning' },
-        { label: 'Tied-up Value', value: `$${fmt(Math.round(data.totalValue || 0))}`, description: 'Capital locked in dead stock', trend: null },
-        { label: 'Top Category', value: data.topCategory || '—', description: 'Most dead stock', trend: null },
-        { label: 'Clearance Rate', value: pct(data.clearanceRate), description: 'Items moved recently', trend: null },
-      ]
-    : Array(4).fill({ label: '—', value: '—', description: '', trend: null })
+  const kpis = useMemo(() => {
+    if (!data) return Array(4).fill({ label: '—', value: '—', description: '', trend: null })
+    const totalValue = rows.reduce((s, r) => s + (r.totalValue || 0), 0)
+    const byCat = {}
+    for (const r of rows) {
+      const c = r.category || '—'
+      byCat[c] = (byCat[c] || 0) + (r.totalQty || 0)
+    }
+    const topCategory = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0]?.[0] || '—'
+    return [
+      { label: 'Dead Stock Items', value: fmt(rows.length), sub: 'No movement > threshold', accent: 'amber' },
+      { label: 'Tied-up Value', value: `$${fmt(Math.round(totalValue))}`, sub: 'Capital locked in dead stock' },
+      { label: 'Top Category', value: topCategory, sub: 'Most dead stock' },
+      { label: 'Threshold', value: `${threshold}d`, sub: 'Idle period' },
+    ]
+  }, [data, rows, threshold])
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <KPIGrid kpis={kpis} isLoading={isLoading} columns={4} />
+        <KPIGrid items={kpis} />
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">No movement for:</span>
           <select
@@ -653,7 +670,7 @@ function DeadStockTab({ active }) {
       </div>
       <ReportTable
         columns={columns}
-        data={data?.items || []}
+        data={rows}
         isLoading={isLoading}
         searchPlaceholder="Search SKU, item..."
         exportName="dead-stock"

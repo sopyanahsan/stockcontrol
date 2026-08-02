@@ -10,6 +10,7 @@ module.exports = {
   testEnvironment: 'jest-environment-node',
   roots: ['<rootDir>/tests'],
   testMatch: ['**/*.test.js'],
+  setupFiles: ['<rootDir>/tests/setup-env.js'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   transform: {
     '^.+\\.(js|jsx)$': ['babel-jest', babelConfig],

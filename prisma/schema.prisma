@@ -35,17 +35,23 @@ model User {
 }
 
 model Category {
-  id          String  @id @default(uuid())
-  name        String  @unique
+  id          String   @id @default(uuid())
+  name        String   @unique
   description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   items       Item[]
 }
 
 model Uom {
-  id    String @id @default(uuid())
-  code  String @unique
-  name  String
-  items Item[]
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items     Item[]
 }
 
 model Item {

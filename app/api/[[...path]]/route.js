@@ -449,6 +449,133 @@ async function deleteItem(user, id) {
   return json({ deleted: true })
 }
 
+// ==================== CATEGORIES ====================
+async function listCategories(searchParams) {
+  const search = searchParams.get('search')
+  const active = searchParams.get('active')
+  const where = {}
+  if (search) where.name = { contains: search, mode: 'insensitive' }
+  if (active === 'true') where.isActive = true
+  else if (active === 'false') where.isActive = false
+  const [rows, counts, total] = await Promise.all([
+    prisma.category.findMany({ where, orderBy: { name: 'asc' }, take: getLimit(searchParams, 200, 500), skip: readIntParam(searchParams, 'offset', 0, 100000) }),
+    prisma.item.groupBy({ by: ['categoryId'], _count: true }),
+    prisma.category.count({ where }),
+  ])
+  const countMap = Object.fromEntries(counts.map((c) => [c.categoryId, c._count]))
+  const data = rows.map((c) => ({ ...c, itemCount: countMap[c.id] || 0 }))
+  return json({ data, total })
+}
+
+async function createCategory(request, user) {
+  if (!canManageMaster(user.role)) return err('Insufficient permissions', 403)
+  const b = await parseBody(request)
+  const name = String(b.name || '').trim()
+  if (!name) return err('Category name is required')
+  const exists = await prisma.category.findUnique({ where: { name } })
+  if (exists) return err('Category name already exists', 409)
+  const category = await prisma.category.create({ data: { name, description: b.description || null } })
+  await logAudit({ user, action: 'CREATE', module: 'MASTER_CATEGORY', entityType: 'Category', entityId: category.id, description: `Created category ${category.name}`, after: category })
+  return json(category, 201)
+}
+
+async function updateCategory(request, user, id) {
+  if (!canManageMaster(user.role)) return err('Insufficient permissions', 403)
+  const before = await prisma.category.findUnique({ where: { id } })
+  if (!before) return err('Category not found', 404)
+  const b = await parseBody(request)
+  const name = b.name !== undefined ? String(b.name).trim() : before.name
+  if (!name) return err('Category name is required')
+  const dup = await prisma.category.findFirst({ where: { name, id: { not: id } } })
+  if (dup) return err('Category name already exists', 409)
+  const category = await prisma.category.update({
+    where: { id },
+    data: {
+      name,
+      description: b.description !== undefined ? b.description : before.description,
+      isActive: b.isActive !== undefined ? Boolean(b.isActive) : before.isActive,
+    },
+  })
+  await logAudit({ user, action: 'UPDATE', module: 'MASTER_CATEGORY', entityType: 'Category', entityId: id, description: `Updated category ${category.name}`, before, after: category })
+  return json(category)
+}
+
+async function deleteCategory(user, id) {
+  if (user.role !== 'ADMINISTRATOR') return err('Only Administrator can delete categories', 403)
+  const before = await prisma.category.findUnique({ where: { id } })
+  if (!before) return err('Category not found', 404)
+  const itemCount = await prisma.item.count({ where: { categoryId: id } })
+  if (itemCount > 0) return err(`Cannot delete category "${before.name}" — it is used by ${itemCount} item(s). Deactivate it instead.`, 409)
+  await prisma.category.delete({ where: { id } })
+  await logAudit({ user, action: 'DELETE', module: 'MASTER_CATEGORY', entityType: 'Category', entityId: id, description: `Deleted category ${before.name}`, before })
+  return json({ deleted: true })
+}
+
+// ==================== UOMS ====================
+async function listUoms(searchParams) {
+  const search = searchParams.get('search')
+  const active = searchParams.get('active')
+  const where = {}
+  if (search) {
+    where.OR = [
+      { code: { contains: search, mode: 'insensitive' } },
+      { name: { contains: search, mode: 'insensitive' } },
+    ]
+  }
+  if (active === 'true') where.isActive = true
+  else if (active === 'false') where.isActive = false
+  const [rows, counts, total] = await Promise.all([
+    prisma.uom.findMany({ where, orderBy: { code: 'asc' }, take: getLimit(searchParams, 200, 500), skip: readIntParam(searchParams, 'offset', 0, 100000) }),
+    prisma.item.groupBy({ by: ['uomId'], _count: true }),
+    prisma.uom.count({ where }),
+  ])
+  const countMap = Object.fromEntries(counts.map((c) => [c.uomId, c._count]))
+  const data = rows.map((u) => ({ ...u, itemCount: countMap[u.id] || 0 }))
+  return json({ data, total })
+}
+
+async function createUom(request, user) {
+  if (!canManageMaster(user.role)) return err('Insufficient permissions', 403)
+  const b = await parseBody(request)
+  const code = String(b.code || '').trim().toUpperCase()
+  const name = String(b.name || '').trim()
+  if (!code || !name) return err('Code and name are required')
+  const exists = await prisma.uom.findUnique({ where: { code } })
+  if (exists) return err('UOM code already exists', 409)
+  const uom = await prisma.uom.create({ data: { code, name } })
+  await logAudit({ user, action: 'CREATE', module: 'MASTER_UOM', entityType: 'Uom', entityId: uom.id, description: `Created UOM ${uom.code} - ${uom.name}`, after: uom })
+  return json(uom, 201)
+}
+
+async function updateUom(request, user, id) {
+  if (!canManageMaster(user.role)) return err('Insufficient permissions', 403)
+  const before = await prisma.uom.findUnique({ where: { id } })
+  if (!before) return err('UOM not found', 404)
+  const b = await parseBody(request)
+  const code = b.code !== undefined ? String(b.code).trim().toUpperCase() : before.code
+  const name = b.name !== undefined ? String(b.name).trim() : before.name
+  if (!code || !name) return err('Code and name are required')
+  const dup = await prisma.uom.findFirst({ where: { code, id: { not: id } } })
+  if (dup) return err('UOM code already exists', 409)
+  const uom = await prisma.uom.update({
+    where: { id },
+    data: { code, name, isActive: b.isActive !== undefined ? Boolean(b.isActive) : before.isActive },
+  })
+  await logAudit({ user, action: 'UPDATE', module: 'MASTER_UOM', entityType: 'Uom', entityId: id, description: `Updated UOM ${uom.code} - ${uom.name}`, before, after: uom })
+  return json(uom)
+}
+
+async function deleteUom(user, id) {
+  if (user.role !== 'ADMINISTRATOR') return err('Only Administrator can delete UOMs', 403)
+  const before = await prisma.uom.findUnique({ where: { id } })
+  if (!before) return err('UOM not found', 404)
+  const itemCount = await prisma.item.count({ where: { uomId: id } })
+  if (itemCount > 0) return err(`Cannot delete UOM "${before.code}" — it is used by ${itemCount} item(s). Deactivate it instead.`, 409)
+  await prisma.uom.delete({ where: { id } })
+  await logAudit({ user, action: 'DELETE', module: 'MASTER_UOM', entityType: 'Uom', entityId: id, description: `Deleted UOM ${before.code} - ${before.name}`, before })
+  return json({ deleted: true })
+}
+
 // ==================== LOCATIONS ====================
 async function listWarehouses() {
   const warehouses = await prisma.warehouse.findMany({ include: { zones: { include: { locations: true }, orderBy: { code: 'asc' } } }, orderBy: { code: 'asc' } })
@@ -600,6 +727,26 @@ async function route(request, ctx) {
       } else {
         if (method === 'PUT') return await updateItem(request, user, path[1])
         if (method === 'DELETE') return await deleteItem(user, path[1])
+      }
+    }
+
+    if (seg === 'categories') {
+      if (!path[1]) {
+        if (method === 'GET') return await listCategories(searchParams)
+        if (method === 'POST') return await createCategory(request, user)
+      } else {
+        if (method === 'PUT') return await updateCategory(request, user, path[1])
+        if (method === 'DELETE') return await deleteCategory(user, path[1])
+      }
+    }
+
+    if (seg === 'uoms') {
+      if (!path[1]) {
+        if (method === 'GET') return await listUoms(searchParams)
+        if (method === 'POST') return await createUom(request, user)
+      } else {
+        if (method === 'PUT') return await updateUom(request, user, path[1])
+        if (method === 'DELETE') return await deleteUom(user, path[1])
       }
     }
 
