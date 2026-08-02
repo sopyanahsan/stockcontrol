@@ -11,12 +11,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Warehouse, Loader2 } from 'lucide-react'
 
-const DEMO_USERS = [
-  { label: 'Administrator', email: 'admin@stockcontrol.com', password: 'admin123' },
-  { label: 'Supervisor', email: 'supervisor@stockcontrol.com', password: 'supervisor123' },
-  { label: 'Stock Control', email: 'stock@stockcontrol.com', password: 'stock123' },
-]
-
 const App = () => {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -25,12 +19,12 @@ const App = () => {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const submit = async (e, creds) => {
+  const submit = async (e) => {
     e?.preventDefault?.()
     setError('')
     setLoading(true)
     try {
-      await api('/auth/login', { method: 'POST', body: creds || { email, password } })
+      await api('/auth/login', { method: 'POST', body: { email, password } })
       queryClient.clear()
       router.replace('/')
     } catch (err) {
@@ -66,22 +60,6 @@ const App = () => {
               Sign in
             </Button>
           </form>
-        </div>
-
-        <div className="mt-4 rounded-md border border-gray-200 bg-white p-4">
-          <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-400">Demo accounts</div>
-          <div className="grid grid-cols-3 gap-2">
-            {DEMO_USERS.map((u) => (
-              <button
-                key={u.email}
-                disabled={loading}
-                onClick={(e) => submit(e, { email: u.email, password: u.password })}
-                className="rounded-md border border-gray-200 px-2 py-1.5 text-[11px] text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-              >
-                {u.label}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
     </div>

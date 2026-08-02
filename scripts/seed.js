@@ -1,27 +1,12 @@
 const { PrismaClient } = require('@prisma/client')
-const bcrypt = require('bcryptjs')
 
 const prisma = new PrismaClient()
 
 async function main() {
   console.log('Seeding database...')
 
-  // ---- Users ----
-  const usersData = [
-    { email: 'admin@stockcontrol.com', password: 'admin123', name: 'System Administrator', role: 'ADMINISTRATOR' },
-    { email: 'supervisor@stockcontrol.com', password: 'supervisor123', name: 'Warehouse Supervisor', role: 'SUPERVISOR' },
-    { email: 'stock@stockcontrol.com', password: 'stock123', name: 'Stock Control Officer', role: 'STOCK_CONTROL' },
-  ]
-  const users = {}
-  for (const u of usersData) {
-    const passwordHash = bcrypt.hashSync(u.password, 10)
-    users[u.role] = await prisma.user.upsert({
-      where: { email: u.email },
-      update: { passwordHash, name: u.name, role: u.role, isActive: true },
-      create: { email: u.email, passwordHash, name: u.name, role: u.role },
-    })
-  }
-  console.log('Users seeded')
+  // NOTE: No users are seeded. The first administrator is created through the
+  // /setup wizard (First-Time System Setup, Phase 10.1).
 
   // ---- Categories ----
   const categoryNames = ['Furniture', 'Hardware', 'Electronics', 'Packaging', 'Tools']
@@ -134,8 +119,11 @@ async function main() {
 
   // ---- Opening stock via Stock Ledger + FIFO layers (business rule: stock only from transactions) ----
   const existingLedger = await prisma.stockLedger.count()
-  if (existingLedger === 0) {
-    const admin = users['ADMINISTRATOR']
+  const user = await prisma.user.findFirst({ where: { isActive: true }, orderBy: { createdAt: 'asc' } })
+  if (existingLedger === 0 && !user) {
+    console.log('No users found — run /setup first. Opening stock skipped.')
+  } else if (existingLedger === 0) {
+    const admin = user
     const openingStock = [
       { sku: 'FUR-CHR-001', loc: 'A-01-01', qty: 120, cost: 85 },
       { sku: 'FUR-DSK-002', loc: 'A-01-02', qty: 45, cost: 210 },
