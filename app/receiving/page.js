@@ -57,6 +57,7 @@ const App = () => {
       setOpenCreate(false)
       setForm({ warehouseId: '', supplierId: '', supplier: '', refDocument: '', invoiceNumber: '', vehicleNumber: '', driverName: '', remarks: '' })
       qc.invalidateQueries({ queryKey: ['receiving-list'] })
+      qc.invalidateQueries({ queryKey: ['meta'] })
       router.push(`/receiving/${r.id}`)
     },
     onError: (e) => toast.error(e.message),
@@ -67,12 +68,19 @@ const App = () => {
     createMut.mutate({ ...form, lines: [] })
   }
 
+  const openCreateDialog = () => {
+    // Refetch master data so newly created Suppliers / Warehouses / Locations
+    // appear in the dropdowns every time the dialog is opened.
+    qc.invalidateQueries({ queryKey: ['meta'] })
+    setOpenCreate(true)
+  }
+
   return (
     <AppShell
       title="Receiving"
       subtitle="Goods Receipt Notes - stock enters STAGING, then flows to Putaway"
       actions={
-        <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={() => setOpenCreate(true)}>
+        <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={openCreateDialog}>
           <Plus className="mr-1 h-4 w-4" /> New Receiving
         </Button>
       }
@@ -99,7 +107,7 @@ const App = () => {
               <PackagePlus className="h-8 w-8 text-gray-300" />
               <div className="text-sm font-medium text-gray-500">No receiving documents yet</div>
               <div className="text-xs text-gray-400">Create a new Goods Receipt Note to begin.</div>
-              <Button size="sm" variant="outline" className="mt-2" onClick={() => setOpenCreate(true)}>
+              <Button size="sm" variant="outline" className="mt-2" onClick={openCreateDialog}>
                 <Plus className="mr-1 h-4 w-4" /> New Receiving
               </Button>
             </div>

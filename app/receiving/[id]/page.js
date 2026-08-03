@@ -94,11 +94,17 @@ const App = ({ params }) => {
     vehicleNumber: data?.vehicleNumber || '',
     driverName: data?.driverName || '',
   }
-  const openDetailsDialog = () => { setDetailsForm(null); setOpenDetails(true) }
+  const openDetailsDialog = () => { setDetailsForm(null); setOpenDetails(true); qc.invalidateQueries({ queryKey: ['meta'] }) }
 
   const detailsMut = useMutation({
     mutationFn: (payload) => api(`/receiving/${id}`, { method: 'PUT', body: payload }),
-    onSuccess: () => { toast.success('Details saved'); setOpenDetails(false); qc.invalidateQueries({ queryKey: ['receiving', id] }) },
+    onSuccess: () => {
+      toast.success('Details saved')
+      setOpenDetails(false)
+      qc.invalidateQueries({ queryKey: ['receiving', id] })
+      qc.invalidateQueries({ queryKey: ['meta'] })
+      qc.invalidateQueries({ queryKey: ['items'] })
+    },
     onError: (e) => toast.error(e.message),
   })
 
@@ -128,7 +134,11 @@ const App = ({ params }) => {
     return updater(base)
   })
 
-  const addLine = () => setEditLines((lines) => [...lines, { itemId: '', expectedQty: 1, receivedQty: 0, unitCost: 0, batchNo: '', itemLabel: '', serialTracked: false }])
+  const addLine = () => {
+    // Ensure the item dropdown always includes the newest master items.
+    qc.invalidateQueries({ queryKey: ['items'] })
+    setEditLines((lines) => [...lines, { itemId: '', expectedQty: 1, receivedQty: 0, unitCost: 0, batchNo: '', itemLabel: '', serialTracked: false }])
+  }
   const removeLine = (i) => setEditLines((lines) => lines.filter((_, idx) => idx !== i))
   const updateLine = (i, patch) => setEditLines((lines) => lines.map((l, idx) => idx === i ? { ...l, ...patch } : l))
 
@@ -163,13 +173,24 @@ const App = ({ params }) => {
         })),
       },
     }),
-    onSuccess: () => { toast.success('Draft saved'); setDraftLines(null); qc.invalidateQueries({ queryKey: ['receiving', id] }) },
+    onSuccess: () => {
+      toast.success('Draft saved')
+      setDraftLines(null)
+      qc.invalidateQueries({ queryKey: ['receiving', id] })
+      qc.invalidateQueries({ queryKey: ['items'] })
+      qc.invalidateQueries({ queryKey: ['meta'] })
+    },
     onError: (e) => toast.error(e.message),
   })
 
   const startMut = useMutation({
     mutationFn: () => api(`/receiving/${id}/start`, { method: 'POST' }),
-    onSuccess: () => { toast.success('Receiving started'); qc.invalidateQueries({ queryKey: ['receiving', id] }) },
+    onSuccess: () => {
+      toast.success('Receiving started')
+      qc.invalidateQueries({ queryKey: ['receiving', id] })
+      qc.invalidateQueries({ queryKey: ['items'] })
+      qc.invalidateQueries({ queryKey: ['meta'] })
+    },
     onError: (e) => toast.error(e.message),
   })
 
@@ -208,6 +229,8 @@ const App = ({ params }) => {
       setOpenPost(false)
       qc.invalidateQueries({ queryKey: ['receiving', id] })
       qc.invalidateQueries({ queryKey: ['receiving-list'] })
+      qc.invalidateQueries({ queryKey: ['items'] })
+      qc.invalidateQueries({ queryKey: ['meta'] })
     },
     onError: (e) => toast.error(e.message),
   })

@@ -118,12 +118,17 @@ const App = () => {
   })
 
   const openCreate = () => {
+    // Always refetch master data so a freshly created Category / UOM shows up
+    // in the dropdowns the moment the dialog opens.
+    queryClient.invalidateQueries({ queryKey: ['meta'] })
     setEditing(null)
     form.reset({ sku: '', name: '', description: '', barcode: '', categoryId: '', uomId: '', minStock: 0, reorderPoint: 0, maxStock: 0, unitCost: 0, serialTracked: false })
     setDialogOpen(true)
   }
 
   const openEdit = (item) => {
+    // Always refetch master data so the Category / UOM dropdowns are current.
+    queryClient.invalidateQueries({ queryKey: ['meta'] })
     setEditing(item)
     form.reset({
       sku: item.sku, name: item.name, description: item.description || '', barcode: item.barcode || '',

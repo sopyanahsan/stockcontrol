@@ -79,12 +79,19 @@ const App = () => {
     createMut.mutate({ lines: validLines, reasonCodeId, remarks: remarks || undefined })
   }
 
+  const openCreateDialog = () => {
+    // Refetch master data so new Items / Locations / Reason Codes appear in
+    // the dropdowns every time the dialog is opened.
+    qc.invalidateQueries({ queryKey: ['meta'] })
+    setCreateOpen(true)
+  }
+
   return (
     <AppShell
       title="Stock Adjustment"
       subtitle="Record inventory corrections — increases and decreases"
       actions={
-        <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={() => setCreateOpen(true)}>
+        <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={openCreateDialog}>
           <Plus className="mr-1 h-3.5 w-3.5" /> New Adjustment
         </Button>
       }

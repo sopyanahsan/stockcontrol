@@ -61,7 +61,9 @@ const App = () => {
   const canManage = ['ADMINISTRATOR', 'SUPERVISOR'].includes(me?.user?.role)
   const isAdmin = me?.user?.role === 'ADMINISTRATOR'
 
-  const { data: suppliers = [], isLoading } = useQuery({ queryKey: ['suppliers'], queryFn: () => api('/suppliers') })
+  // /api/suppliers returns { data, total } — extract the rows array for the table.
+  const { data: suppliersRes = { data: [] }, isLoading } = useQuery({ queryKey: ['suppliers'], queryFn: () => api('/suppliers') })
+  const suppliers = suppliersRes.data || []
 
   const downloadFile = useCallback(async (path, filename) => {
     const res = await fetch(`/api${path}`, { credentials: 'include' })

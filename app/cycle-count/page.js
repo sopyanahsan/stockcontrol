@@ -122,7 +122,7 @@ const App = () => {
       title="Cycle Count"
       subtitle="Physical stock verification and variance correction"
       actions={
-        <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={() => setCreateOpen(true)}>
+        <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={() => { qc.invalidateQueries({ queryKey: ['meta'] }); setCreateOpen(true) }}>
           <Plus className="mr-1 h-3.5 w-3.5" /> New Cycle Count
         </Button>
       }
