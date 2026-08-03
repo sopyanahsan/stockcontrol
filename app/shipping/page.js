@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
 import AppShell from '@/components/app-shell'
+import HelpButton from '@/components/help/HelpButton'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -175,6 +176,7 @@ const App = () => {
               {queue.length} awaiting shipment
             </Badge>
           )}
+          <HelpButton pageId="shipping" />
         </div>
       }
     >

@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
+import * as analytics from '@/lib/analytics/client'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ReportLayout } from '@/components/reports/ReportLayout'
 import { KPIGrid } from '@/components/reports/KPIGrid'
@@ -86,6 +87,15 @@ function ReceivingTab({ active }) {
 
   const rows = useMemo(() => data?.data || [], [data])
 
+  // Receiving KPIs come from the Analytics Client (shared queryKey dedupes fetch).
+  const { data: analyticsData } = useQuery({
+    queryKey: ['analytics', 'warehouse'],
+    queryFn: () => analytics.warehouse(),
+    enabled: active,
+  })
+  const receiving = analyticsData?.data?.receiving?.data
+  const engine = receiving?.summary || {}
+
   const columns = useMemo(
     () => [
       {
@@ -113,14 +123,14 @@ function ReceivingTab({ active }) {
     if (!data) return emptyKpis()
     const totalQty = rows.reduce((s, r) => s + (r.totalReceivedQty || 0), 0)
     const totalLines = rows.reduce((s, r) => s + (r.totalLines || 0), 0)
-    const pending = rows.filter((r) => r.status === 'PENDING').length
+    const pendingRows = rows.filter((r) => r.status === 'PENDING').length
     return [
-      { label: 'Total GRNs', value: fmt(rows.length), sub: 'In period' },
-      { label: 'Qty Received', value: fmt(totalQty), sub: 'Units received' },
-      { label: 'Lines Received', value: fmt(totalLines), sub: 'Order lines' },
-      { label: 'Pending', value: fmt(pending), sub: 'Awaiting receipt', accent: 'amber' },
+      { label: 'Total GRNs', value: fmt(engine.totalDocuments ?? rows.length), sub: 'In period' },
+      { label: 'Qty Received', value: fmt(engine.totalQuantity ?? totalQty), sub: 'Units received' },
+      { label: 'Lines Received', value: fmt(engine.totalLines ?? totalLines), sub: 'Order lines' },
+      { label: 'Pending', value: fmt(engine.draft ?? pendingRows), sub: 'Awaiting receipt', accent: 'amber' },
     ]
-  }, [data, rows])
+  }, [data, rows, engine])
 
   const trend = useMemo(() => dailyTrend(rows, (r) => r.totalReceivedQty), [rows])
 
@@ -172,6 +182,15 @@ function PutawayTab({ active }) {
 
   const rows = useMemo(() => data?.data || [], [data])
 
+  // Putaway KPIs come from the Analytics Client (shared queryKey dedupes fetch).
+  const { data: analyticsData } = useQuery({
+    queryKey: ['analytics', 'warehouse'],
+    queryFn: () => analytics.warehouse(),
+    enabled: active,
+  })
+  const putaway = analyticsData?.data?.putaway?.data
+  const engine = putaway?.summary || {}
+
   const columns = useMemo(
     () => [
       {
@@ -199,13 +218,15 @@ function PutawayTab({ active }) {
     if (!data) return emptyKpis()
     const durations = rows.map((r) => r.durationMinutes).filter((d) => d != null)
     const avgDuration = durations.length ? Math.round(durations.reduce((s, d) => s + d, 0) / durations.length) : null
+    const completedRows = rows.filter((r) => r.status === 'COMPLETED').length
+    const pendingRows = rows.filter((r) => r.status === 'PENDING').length
     return [
-      { label: 'Total Putaways', value: fmt(rows.length), sub: 'In period' },
+      { label: 'Total Putaways', value: fmt(engine.totalDocuments ?? rows.length), sub: 'In period' },
       { label: 'Avg Duration', value: avgDuration != null ? `${avgDuration} min` : '—', sub: 'Average time' },
-      { label: 'Completed', value: fmt(rows.filter((r) => r.status === 'COMPLETED').length), sub: 'Tasks done' },
-      { label: 'Pending', value: fmt(rows.filter((r) => r.status === 'PENDING').length), sub: 'Awaiting putaway', accent: 'amber' },
+      { label: 'Completed', value: fmt(engine.posted ?? completedRows), sub: 'Tasks done' },
+      { label: 'Pending', value: fmt(engine.draft ?? pendingRows), sub: 'Awaiting putaway', accent: 'amber' },
     ]
-  }, [data, rows])
+  }, [data, rows, engine])
 
   const trend = useMemo(() => dailyTrend(rows, (r) => r.qty), [rows])
 
@@ -257,6 +278,15 @@ function MovementTab({ active }) {
 
   const rows = useMemo(() => data?.data || [], [data])
 
+  // Movement KPIs come from the Analytics Client (shared queryKey dedupes fetch).
+  const { data: analyticsData } = useQuery({
+    queryKey: ['analytics', 'warehouse'],
+    queryFn: () => analytics.warehouse(),
+    enabled: active,
+  })
+  const movement = analyticsData?.data?.movement?.data
+  const engine = movement?.summary || {}
+
   const columns = useMemo(
     () => [
       {
@@ -283,14 +313,14 @@ function MovementTab({ active }) {
     if (!data) return emptyKpis()
     const transfers = new Set(rows.map((r) => r.transferNumber).filter(Boolean)).size
     const totalQty = rows.reduce((s, r) => s + (r.qty || 0), 0)
-    const pending = rows.filter((r) => ['DRAFT', 'PENDING', 'IN_PROGRESS'].includes(r.status)).length
+    const pendingRows = rows.filter((r) => ['DRAFT', 'PENDING', 'IN_PROGRESS'].includes(r.status)).length
     return [
-      { label: 'Total Movements', value: fmt(rows.length), sub: 'Lines in period' },
+      { label: 'Total Movements', value: fmt(engine.totalDocuments ?? rows.length), sub: 'Lines in period' },
       { label: 'Units Moved', value: fmt(totalQty), sub: 'Total transferred' },
-      { label: 'Transfers', value: fmt(transfers), sub: 'Distinct documents' },
-      { label: 'In Progress', value: fmt(pending), sub: 'Awaiting execution', accent: 'amber' },
+      { label: 'Transfers', value: fmt(engine.totalDocuments ?? transfers), sub: 'Distinct documents' },
+      { label: 'In Progress', value: fmt(engine.started ?? pendingRows), sub: 'Awaiting execution', accent: 'amber' },
     ]
-  }, [data, rows])
+  }, [data, rows, engine])
 
   const trend = useMemo(() => dailyTrend(rows, (r) => r.qty), [rows])
 
@@ -342,6 +372,15 @@ function AdjustmentTab({ active }) {
 
   const rows = useMemo(() => data?.data || [], [data])
 
+  // Adjustment KPIs come from the Analytics Client (shared queryKey dedupes fetch).
+  const { data: analyticsData } = useQuery({
+    queryKey: ['analytics', 'warehouse'],
+    queryFn: () => analytics.warehouse(),
+    enabled: active,
+  })
+  const adjustment = analyticsData?.data?.adjustment?.data
+  const engine = adjustment?.summary || {}
+
   const columns = useMemo(
     () => [
       {
@@ -377,13 +416,15 @@ function AdjustmentTab({ active }) {
     const positive = rows.reduce((s, r) => s + (r.diffQty > 0 ? r.diffQty : 0), 0)
     const negative = rows.reduce((s, r) => s + (r.diffQty < 0 ? Math.abs(r.diffQty) : 0), 0)
     const net = rows.reduce((s, r) => s + (r.diffQty || 0), 0)
+    const hasEngine = Object.keys(engine).length > 0
+    const totalDocs = hasEngine ? (engine.increaseDocuments ?? 0) + (engine.decreaseDocuments ?? 0) : rows.length
     return [
-      { label: 'Total Adjustments', value: fmt(rows.length), sub: 'In period' },
-      { label: 'Positive', value: fmt(positive), sub: 'Adds to stock', accent: 'green' },
-      { label: 'Negative', value: fmt(negative), sub: 'Removes from stock', accent: 'red' },
-      { label: 'Net Adjustment', value: fmt(Math.round(net * 100) / 100), sub: 'Net qty change' },
+      { label: 'Total Adjustments', value: fmt(totalDocs), sub: 'In period' },
+      { label: 'Positive', value: fmt(engine.totalIncreaseQty ?? positive), sub: 'Adds to stock', accent: 'green' },
+      { label: 'Negative', value: fmt(engine.totalDecreaseQty ?? negative), sub: 'Removes from stock', accent: 'red' },
+      { label: 'Net Adjustment', value: fmt(hasEngine ? (engine.totalIncreaseQty ?? 0) - (engine.totalDecreaseQty ?? 0) : Math.round(net * 100) / 100), sub: 'Net qty change' },
     ]
-  }, [data, rows])
+  }, [data, rows, engine])
 
   return (
     <div className="space-y-4">
@@ -414,6 +455,16 @@ function SupplierTab({ active }) {
   })
 
   const rows = useMemo(() => data?.data || [], [data])
+
+  // Supplier KPIs come from the Analytics Client.
+  const { data: analyticsData } = useQuery({
+    queryKey: ['analytics', 'suppliers'],
+    queryFn: () => analytics.suppliers(),
+    enabled: active,
+  })
+  const supplierAnalytics = analyticsData?.data
+  const engine = supplierAnalytics?.summary || {}
+  const enginePerf = supplierAnalytics?.performance || {}
 
   const columns = useMemo(
     () => [
@@ -448,13 +499,15 @@ function SupplierTab({ active }) {
 
   const kpis = useMemo(() => {
     if (!data) return emptyKpis()
+    const totalReceivings = rows.reduce((s, r) => s + (r.totalReceivings || 0), 0)
+    const totalReceivedQty = rows.reduce((s, r) => s + (r.totalReceivedQty || 0), 0)
     return [
-      { label: 'Total Suppliers', value: fmt(data?.summary?.totalSuppliers || rows.length), sub: 'Registered' },
-      { label: 'Active', value: fmt(data?.summary?.activeSuppliers || 0), sub: 'Usable on Receiving', accent: 'green' },
-      { label: 'Total Receivings', value: fmt(data?.summary?.totalReceivings || 0), sub: 'GRNs posted' },
-      { label: 'Qty Received', value: fmt(data?.summary?.totalReceivedQty || 0), sub: 'Units inbound', accent: 'blue' },
+      { label: 'Total Suppliers', value: fmt(engine.totalSuppliers ?? data?.summary?.totalSuppliers ?? rows.length), sub: 'Registered' },
+      { label: 'Active', value: fmt(engine.activeSuppliers ?? data?.summary?.activeSuppliers ?? 0), sub: 'Usable on Receiving', accent: 'green' },
+      { label: 'Total Receivings', value: fmt(enginePerf.receivingDocuments ?? data?.summary?.totalReceivings ?? totalReceivings), sub: 'GRNs posted' },
+      { label: 'Qty Received', value: fmt(enginePerf.receivedQuantity ?? data?.summary?.totalReceivedQty ?? totalReceivedQty), sub: 'Units inbound', accent: 'blue' },
     ]
-  }, [data, rows])
+  }, [data, rows, engine, enginePerf])
 
   return (
     <div className="space-y-4">
@@ -485,6 +538,15 @@ function CycleCountTab({ active }) {
   })
 
   const rows = useMemo(() => data?.data || [], [data])
+
+  // Cycle Count KPIs come from the Analytics Client (shared queryKey dedupes fetch).
+  const { data: analyticsData } = useQuery({
+    queryKey: ['analytics', 'warehouse'],
+    queryFn: () => analytics.warehouse(),
+    enabled: active,
+  })
+  const cycleCount = analyticsData?.data?.cycleCount?.data
+  const engine = cycleCount?.summary || {}
 
   const columns = useMemo(
     () => [
@@ -527,13 +589,15 @@ function CycleCountTab({ active }) {
     const variances = rows.map((r) => Math.abs(r.totalVariance || 0))
     const avgVariance = variances.length ? Math.round(variances.reduce((s, v) => s + v, 0) / variances.length) : 0
     const netVariance = rows.reduce((s, r) => s + (r.totalVariance || 0), 0)
+    const hasEngine = Object.keys(engine).length > 0
+    const totalCounts = (engine.scheduled ?? 0) + (engine.started ?? 0) + (engine.completed ?? 0)
     return [
-      { label: 'Total Counts', value: fmt(rows.length), sub: 'In period' },
+      { label: 'Total Counts', value: fmt(hasEngine ? totalCounts : rows.length), sub: 'In period' },
       { label: 'Accuracy Rate', value: `${accuracyRate.toFixed(1)}%`, sub: 'Zero variance', accent: 'green' },
       { label: 'Avg Variance', value: fmt(avgVariance), sub: 'Avg absolute variance' },
       { label: 'Net Variance', value: fmt(Math.round(netVariance * 100) / 100), sub: 'System vs counted' },
     ]
-  }, [data, rows])
+  }, [data, rows, engine])
 
   return (
     <div className="space-y-4">

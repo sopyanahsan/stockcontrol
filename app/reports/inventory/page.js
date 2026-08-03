@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
+import * as analytics from '@/lib/analytics/client'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ReportLayout } from '@/components/reports/ReportLayout'
 import { ReportHeader } from '@/components/reports/ReportHeader'
@@ -31,6 +32,16 @@ function StockOnHandTab({ active }) {
     queryFn: () => api(`/reports/inventory/stock-on-hand?days=${dateRange}`),
     enabled: active,
   })
+
+  // Stock KPI summary comes from the Analytics Client (KPI Engine).
+  const { data: analyticsData } = useQuery({
+    queryKey: ['analytics', 'inventory'],
+    queryFn: () => analytics.inventory(),
+    enabled: active,
+  })
+  const inventoryMetrics = analyticsData?.data
+  const engineSummary = inventoryMetrics?.summary || {}
+  const engineHealth = inventoryMetrics?.health || {}
 
   const rows = useMemo(() => data?.data || [], [data])
 
@@ -105,13 +116,15 @@ function StockOnHandTab({ active }) {
     const totalQty = rows.reduce((s, r) => s + (r.qty || 0), 0)
     const totalValue = rows.reduce((s, r) => s + (r.totalValue || 0), 0)
     const belowReorder = rows.filter((r) => r.isLowStock).length
+    const hasEngine = Object.keys(engineSummary).length > 0
+    const belowEngine = (engineHealth.low ?? 0) + (engineHealth.outOfStock ?? 0)
     return [
-      { label: 'Total SKUs', value: fmt(rows.length), sub: 'Items with stock' },
-      { label: 'Total Qty', value: fmt(totalQty), sub: 'Units on hand' },
-      { label: 'Total Value', value: formatCurrency(totalValue), sub: 'At unit cost' },
-      { label: 'Below Reorder', value: fmt(belowReorder), sub: 'Need replenishment', accent: 'amber' },
+      { label: 'Total SKUs', value: fmt(hasEngine ? engineSummary.totalSku ?? rows.length : rows.length), sub: 'Items with stock' },
+      { label: 'Total Qty', value: fmt(hasEngine ? engineSummary.totalQuantity ?? totalQty : totalQty), sub: 'Units on hand' },
+      { label: 'Total Value', value: formatCurrency(hasEngine ? engineSummary.inventoryValue ?? totalValue : totalValue), sub: 'At unit cost' },
+      { label: 'Below Reorder', value: fmt(hasEngine ? belowEngine : belowReorder), sub: 'Need replenishment', accent: 'amber' },
     ]
-  }, [data, rows])
+  }, [data, rows, engineSummary, engineHealth])
 
   const zoneData = useMemo(() => {
     const m = {}

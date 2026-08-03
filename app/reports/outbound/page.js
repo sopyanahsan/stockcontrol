@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
+import * as analytics from '@/lib/analytics/client'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ReportLayout } from '@/components/reports/ReportLayout'
 import { KPIGrid } from '@/components/reports/KPIGrid'
@@ -91,6 +92,18 @@ function PickingTab({ active }) {
 
   const rows = useMemo(() => data?.data || [], [data])
 
+  // Outbound KPIs come from the Analytics Client (shared queryKey dedupes
+  // the fetch across tabs). Metrics the engine does not yet expose fall back
+  // to the detailed report rows.
+  const { data: analyticsData } = useQuery({
+    queryKey: ['analytics', 'outbound'],
+    queryFn: () => analytics.outbound(),
+    enabled: active,
+  })
+  const picking = analyticsData?.data?.picking?.data
+  const engine = picking?.summary || {}
+  const engineStatus = picking?.status || {}
+
   const columns = useMemo(
     () => [
       {
@@ -118,15 +131,16 @@ function PickingTab({ active }) {
     if (!data) return emptyKpis()
     const totalLines = rows.reduce((s, r) => s + (r.totalLines || 0), 0)
     const totalPicked = rows.reduce((s, r) => s + (r.totalPickedQty || 0), 0)
-    const avgLines = rows.length ? Math.round(totalLines / rows.length) : 0
-    const pending = rows.filter((r) => ['DRAFT', 'ASSIGNED', 'IN_PROGRESS'].includes(r.status)).length
+    const pendingRows = rows.filter((r) => ['DRAFT', 'ASSIGNED', 'IN_PROGRESS'].includes(r.status)).length
+    const enginePending = (engine.draft ?? 0) + (engine.started ?? 0) + (engineStatus.ASSIGNED ?? 0)
+    const hasEngine = Object.keys(engine).length > 0
     return [
-      { label: 'Total Picks', value: fmt(rows.length), sub: 'In period' },
-      { label: 'Lines Picked', value: fmt(totalLines), sub: 'Order lines' },
-      { label: 'Units Picked', value: fmt(totalPicked), sub: 'Total units' },
-      { label: 'Pending', value: fmt(pending), sub: 'Awaiting completion', accent: 'amber' },
+      { label: 'Total Picks', value: fmt(engine.totalDocuments ?? rows.length), sub: 'In period' },
+      { label: 'Lines Picked', value: fmt(engine.totalLines ?? totalLines), sub: 'Order lines' },
+      { label: 'Units Picked', value: fmt(engine.totalQuantity ?? totalPicked), sub: 'Total units' },
+      { label: 'Pending', value: fmt(hasEngine ? enginePending : pendingRows), sub: 'Awaiting completion', accent: 'amber' },
     ]
-  }, [data, rows])
+  }, [data, rows, engine, engineStatus])
 
   const trend = useMemo(() => dailyTrend(rows, 'createdAt', (r) => r.totalPickedQty), [rows])
 
@@ -178,6 +192,15 @@ function PackingTab({ active }) {
 
   const rows = useMemo(() => data?.data || [], [data])
 
+  // Packing KPIs come from the Analytics Client (shared queryKey dedupes fetch).
+  const { data: analyticsData } = useQuery({
+    queryKey: ['analytics', 'outbound'],
+    queryFn: () => analytics.outbound(),
+    enabled: active,
+  })
+  const packing = analyticsData?.data?.packing?.data
+  const engine = packing?.summary || {}
+
   const columns = useMemo(
     () => [
       {
@@ -211,12 +234,12 @@ function PackingTab({ active }) {
     const durations = rows.map((r) => r.durationMinutes).filter((d) => d != null)
     const avgDuration = durations.length ? Math.round(durations.reduce((s, d) => s + d, 0) / durations.length) : null
     return [
-      { label: 'Total Packs', value: fmt(rows.length), sub: 'In period' },
-      { label: 'Items Packed', value: fmt(totalItems), sub: 'Total units' },
-      { label: 'Open Packages', value: fmt(openPackages), sub: 'Being packed', accent: 'amber' },
+      { label: 'Total Packs', value: fmt(engine.totalDocuments ?? rows.length), sub: 'In period' },
+      { label: 'Items Packed', value: fmt(engine.packedQuantity ?? totalItems), sub: 'Total units' },
+      { label: 'Open Packages', value: fmt(engine.started ?? openPackages), sub: 'Being packed', accent: 'amber' },
       { label: 'Avg Duration', value: avgDuration != null ? `${avgDuration} min` : '—', sub: 'Per order' },
     ]
-  }, [data, rows])
+  }, [data, rows, engine])
 
   const trend = useMemo(() => dailyTrend(rows, 'createdAt', (r) => r.totalItemsPacked), [rows])
 
@@ -268,6 +291,15 @@ function ShippingTab({ active }) {
 
   const rows = useMemo(() => data?.data || [], [data])
 
+  // Shipping KPIs come from the Analytics Client (shared queryKey dedupes fetch).
+  const { data: analyticsData } = useQuery({
+    queryKey: ['analytics', 'outbound'],
+    queryFn: () => analytics.outbound(),
+    enabled: active,
+  })
+  const shipping = analyticsData?.data?.shipping?.data
+  const engine = shipping?.summary || {}
+
   const columns = useMemo(
     () => [
       {
@@ -298,14 +330,16 @@ function ShippingTab({ active }) {
     const totalPackages = rows.reduce((s, r) => s + (r.totalPackages || 0), 0)
     const durations = rows.map((r) => r.durationMinutes).filter((d) => d != null)
     const avgDuration = durations.length ? Math.round(durations.reduce((s, d) => s + d, 0) / durations.length) : null
-    const pending = rows.filter((r) => !['SHIPPED', 'DELIVERED'].includes(r.status)).length
+    const pendingRows = rows.filter((r) => !['SHIPPED', 'DELIVERED'].includes(r.status)).length
+    const hasEngine = Object.keys(engine).length > 0
+    const notShipped = (engine.draft ?? 0) + (engine.started ?? 0)
     return [
-      { label: 'Total Shipments', value: fmt(rows.length), sub: 'In period' },
+      { label: 'Total Shipments', value: fmt(engine.totalDocuments ?? rows.length), sub: 'In period' },
       { label: 'Packages', value: fmt(totalPackages), sub: 'Total packages' },
       { label: 'Avg Duration', value: avgDuration != null ? `${avgDuration} min` : '—', sub: 'Per shipment' },
-      { label: 'Not Shipped', value: fmt(pending), sub: 'Awaiting shipment', accent: 'amber' },
+      { label: 'Not Shipped', value: fmt(hasEngine ? notShipped : pendingRows), sub: 'Awaiting shipment', accent: 'amber' },
     ]
-  }, [data, rows])
+  }, [data, rows, engine])
 
   const trend = useMemo(() => dailyTrend(rows, 'shippedAt', (r) => r.totalPackages), [rows])
 

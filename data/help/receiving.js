@@ -1,0 +1,72 @@
+// Receiving contextual help guide — consumed through the registry
+// (lib/help/registry.js). All user-facing content lives here; components stay
+// generic and reusable.
+
+export default {
+  id: 'receiving',
+  title: 'Receiving',
+  category: 'Warehouse Operation',
+  difficulty: 'Intermediate',
+  estimatedRead: 5,
+  updatedAt: '2026-08-03',
+  description:
+    'Receiving digunakan untuk mencatat seluruh barang yang masuk ke gudang dari Supplier. Receiving merupakan proses awal dalam operasional gudang yang akan menambah stok setelah dokumen diposting. Setiap Receiving memiliki daftar Item, kuantitas, Supplier, Warehouse, serta status dokumen.',
+  relatedPages: ['suppliers', 'items', 'putaway', 'reports'],
+  prerequisites: ['Supplier sudah tersedia', 'Warehouse sudah tersedia', 'Item sudah tersedia'],
+  usedBy: ['Putaway', 'Inventory', 'Stock Ledger', 'Audit Trail', 'Reports'],
+  workflow: [
+    'Supplier',
+    'Create Receiving',
+    'Add Item',
+    'Save Draft',
+    'Start Receiving',
+    'Post Receiving',
+    'Stock Bertambah',
+    'Putaway',
+    'Inventory',
+  ],
+  documentStatus: [
+    { label: 'Draft', description: 'Dokumen masih dapat diedit.' },
+    { label: 'Started', description: 'Proses penerimaan barang sedang berlangsung.' },
+    { label: 'Posted', description: 'Receiving selesai. Stok telah bertambah. Dokumen tidak dapat diubah kembali.' },
+  ],
+  receivingResolution: [
+    { name: 'Receiving Resolution', description: 'Setiap variance pada Receiving wajib didokumentasikan dengan Reason dan Resolution. Tidak ada selisih yang dibiarkan tanpa penjelasan.' },
+    { name: 'Variance', description: 'Selisih antara Received Qty dan Expected Qty — dapat berupa Short (kurang), Over (lebih), atau Item Mismatch (barang salah).' },
+    { name: 'Outstanding', description: 'Jika Resolution = Create Outstanding, sistem mencatat Outstanding Qty = Expected − Received dengan status OPEN. Outstanding tercatat pada dokumen Receiving yang sama — tanpa membuat GRN baru.' },
+    { name: 'Outstanding Receipt', description: 'Kuantitas yang belum diterima dapat diterima kemudian menggunakan GRN yang sama melalui tombol Receive Remaining. Receive Now harus lebih dari 0 dan tidak melebihi Outstanding Qty.' },
+    { name: 'Receive Remaining', description: 'Saat Outstanding diterima, Received Qty bertambah, Outstanding Qty berkurang, dan variance dihitung ulang. Jika Outstanding menjadi nol, Resolution otomatis menjadi Completed dan status menjadi FULL RECEIVED.' },
+    { name: 'Outstanding History', description: 'Riwayat aktivitas penerimaan outstanding (tanggal, operator, qty diterima, outstanding sebelum/sesudah) tercatat pada dokumen Receiving yang sama — tanpa modul terpisah.' },
+    { name: 'Return', description: 'Jika Resolution = Return To Supplier, catat Return Qty dengan status WAITING PICKUP. Belum ada pergerakan stok.' },
+    { name: 'Manager Approval', description: 'Jika Resolution = Manager Approval, posting tetap diblokir sampai disetujui (workflow approval belum tersedia).' },
+    { name: 'Continue Partial', description: 'Memungkinkan Posting — stok hanya mencerminkan Received Qty, sedangkan Outstanding tetap terlihat.' },
+    { name: 'Attachments', description: 'Lampiran enterprise yang dapat dipasang pada dokumen Receiving — di header dokumen maupun pada setiap baris item. Menggunakan modul Attachment yang dapat digunakan kembali di seluruh transaksi gudang.' },
+    { name: 'Header Attachment', description: 'Lampiran tingkat dokumen: Purchase Order, Delivery Order, Invoice, dan Other. Setiap lampiran mendukung Preview, Download, dan Delete (hanya saat Draft).' },
+    { name: 'Line Attachment', description: 'Lampiran per baris item, misalnya Photo Item, Photo Damage, Seal Photo, dan Label Photo. Muncul pada kartu baris Receiving.' },
+    { name: 'Outstanding Attachment', description: 'Pada dialog Receive Remaining, operator dapat mengunggah Delivery Note dan Item Photo sebagai bagian dari riwayat Outstanding.' },
+    { name: 'Evidence Capture', description: 'Modul evidence enterprise untuk mengunggah bukti penerimaan — baik di header dokumen maupun pada setiap baris item. Mendukung Upload File dan Take Picture.' },
+    { name: 'Camera Capture', description: 'Desktop menggunakan MediaDevices untuk menampilkan preview kamera dan menangkap frame; mobile menggunakan kamera belakang native melalui file picker (capture="environment").' },
+    { name: 'Evidence Gallery', description: 'Galeri evidence dengan grid, preview fullscreen, zoom, download, dan delete (hanya dokumen editable). Semua data memakai Attachment API yang sama.' },
+  ],
+  bestPractices: [
+    'Pastikan Supplier yang dipilih sudah benar.',
+    'Verifikasi jumlah fisik sebelum melakukan Post.',
+    'Periksa Item dan UOM sebelum menyimpan.',
+    'Jangan melakukan Post apabila masih ada selisih data.',
+    'Gunakan catatan apabila terdapat kondisi khusus.',
+    'Resolusi setiap variance sebelum melakukan Posting.',
+  ],
+  commonMistakes: [
+    'Salah memilih Supplier.',
+    'Salah memasukkan Quantity.',
+    'Lupa menambahkan seluruh Item.',
+    'Melakukan Post sebelum pemeriksaan selesai.',
+    'Melakukan Post dengan variance yang belum diresolusi.',
+  ],
+  tips: [
+    'Gunakan Draft apabila proses penerimaan belum selesai.',
+    'Gunakan Start saat proses bongkar muat dimulai.',
+    'Pastikan seluruh Item telah diverifikasi sebelum Post.',
+  ],
+  futureLink: '#',
+}

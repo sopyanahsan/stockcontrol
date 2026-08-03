@@ -6,6 +6,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ReportLayout } from '@/components/reports/ReportLayout'
+import HelpButton from '@/components/help/HelpButton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Package, Warehouse, Truck, BarChart3, ArrowRightLeft,
@@ -113,6 +114,7 @@ export default function ReportsPage() {
     <ReportLayout
       title="Reports"
       subtitle="Executive Dashboard — inventory, warehouse, outbound, and audit reports"
+      actions={<HelpButton pageId="reports" />}
     >
       <DashboardKPIs />
 

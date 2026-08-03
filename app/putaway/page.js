@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
 import AppShell from '@/components/app-shell'
+import HelpButton from '@/components/help/HelpButton'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -58,6 +59,7 @@ const App = () => {
               {progressCount} in progress
             </Badge>
           )}
+          <HelpButton pageId="putaway" />
         </div>
       }
     >

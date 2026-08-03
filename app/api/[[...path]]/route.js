@@ -3,6 +3,14 @@ import prisma from '@/lib/prisma'
 import { getAuthUser, verifyPassword, createAccessToken, accessCookie, clearCookie, canManageMaster } from '@/lib/auth'
 import { logAudit } from '@/lib/audit'
 import { getStockOnHand } from '@/lib/stock'
+import { getDashboardMetrics } from '@/lib/analytics/kpi-engine'
+import {
+  createAttachment,
+  listAttachments,
+  getAttachment,
+  deleteAttachment,
+  readAttachmentFile,
+} from '@/lib/attachments/attachment-service'
 import {
   createReceivingDraft,
   updateReceivingDraft,
@@ -11,6 +19,7 @@ import {
   cancelReceiving,
   listReceivings,
   getReceiving,
+  receiveOutstanding,
 } from '@/lib/receiving-service'
 import {
   listPutawayTasks,
@@ -111,7 +120,6 @@ import {
   updateSupplier,
   setSupplierActive,
   deleteSupplier,
-  getSupplierStats,
   getSupplierReport,
 } from '@/lib/supplier-service'
 import {
@@ -308,8 +316,21 @@ async function handleDashboard() {
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
   sevenDaysAgo.setHours(0, 0, 0, 0)
 
-  const [totalItems, totalLocations, stockRows, todayMovements, recentLedger, recentAudit, pickingStats, shipping] = await Promise.all([
-    prisma.item.count({ where: { isActive: true } }),
+  // KPI metrics come ONLY from the KPI Engine (single source of truth).
+  // If the engine fails, the dashboard degrades to zeros instead of crashing.
+  const engine = await getDashboardMetrics()
+  const metrics = engine.success
+    ? engine.data
+    : {
+        activeSku: 0,
+        stockOnHand: 0,
+        inventoryValue: 0,
+        lowStock: 0,
+        outOfStock: 0,
+        suppliers: { total: 0, active: 0, inactive: 0, added30Days: 0 },
+      }
+
+  const [totalLocations, stockRows, todayMovements, recentLedger, recentAudit, pickingStats, shipping] = await Promise.all([
     prisma.location.count({ where: { isActive: true } }),
     getStockOnHand(),
     prisma.stockLedger.count({ where: { createdAt: { gte: startOfDay } } }),
@@ -324,12 +345,7 @@ async function handleDashboard() {
     getShippingKPIs(),
   ])
 
-  const supplierStats = await getSupplierStats()
-
   const [pendingPicking, pickingInProgress, pickingCompletedToday] = pickingStats
-
-  const totalUnits = stockRows.reduce((s, r) => s + r.qty, 0)
-  const totalValue = stockRows.reduce((s, r) => s + r.qty * (r.item?.unitCost || 0), 0)
 
   // Picking KPIs: average pick time and accuracy
   const thirtyDaysAgo = new Date()
@@ -356,6 +372,8 @@ async function handleDashboard() {
     ? Math.round((totalOrders / totalNonCancelled) * 100)
     : 100
 
+  // Chart/list datasets (low-stock list, stock by category) are not yet exposed
+  // by the KPI Engine, so they are derived here from the shared stock source.
   // Low stock: total per item vs reorder point
   const perItem = {}
   for (const r of stockRows) {
@@ -392,8 +410,8 @@ async function handleDashboard() {
   }
 
   return json({
-    stats: { totalItems, totalLocations, totalUnits, totalValue, lowStockCount: lowStock.length, todayMovements },
-    suppliers: supplierStats,
+    metrics,
+    stats: { totalLocations, todayMovements },
     picking: {
       pendingPicking,
       pickingInProgress,
@@ -949,8 +967,10 @@ async function getMeta() {
       include: {
         zones: {
           include: {
-            locations: { where: { isActive: true } },
-            orderBy: { code: 'asc' },
+            locations: {
+              where: { isActive: true },
+              orderBy: { code: 'asc' },
+            },
           },
           orderBy: { code: 'asc' },
         },
@@ -962,6 +982,52 @@ async function getMeta() {
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true, role: true }, orderBy: { name: 'asc' } }),
   ])
   return json({ categories, uoms, warehouses, reasonCodes, suppliers, items, users })
+}
+
+// ==================== ATTACHMENTS (RCV-3.0) ====================
+async function handleAttachmentUpload(request, user) {
+  const form = await request.formData().catch(() => null)
+  if (!form) return err('Expected multipart form data', 400)
+  const module = form.get('module')
+  const referenceId = form.get('referenceId')
+  const referenceLineId = form.get('referenceLineId') || null
+  const description = form.get('description') || null
+  const file = form.get('file')
+  try {
+    const attachment = await createAttachment({ user, module, referenceId, referenceLineId, description, file })
+    return json(attachment, 201)
+  } catch (e) { return err(e.message, 400) }
+}
+
+async function handleAttachmentList(searchParams) {
+  const module = searchParams.get('module')
+  const referenceId = searchParams.get('referenceId')
+  if (!module || !referenceId) return err('module and referenceId are required', 400)
+  const list = await listAttachments({
+    module,
+    referenceId,
+    referenceLineId: searchParams.get('referenceLineId') || null,
+  })
+  return json(list)
+}
+
+async function handleAttachmentFile(id) {
+  const att = await getAttachment(id)
+  if (!att || !att.isActive) return err('Attachment not found', 404)
+  try {
+    const { buffer, contentType, originalName } = await readAttachmentFile(att)
+    return new Response(new Uint8Array(buffer), {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(originalName)}`,
+      },
+    })
+  } catch (e) { return err('Attachment file unavailable', 404) }
+}
+
+async function handleAttachmentDelete(user, id) {
+  try { return json(await deleteAttachment({ user, id })) }
+  catch (e) { return err(e.message, 400) }
 }
 
 // ==================== ROUTER ====================
@@ -1061,6 +1127,17 @@ async function route(request, ctx) {
     if (seg === 'ledger' && method === 'GET') return await listLedger(searchParams)
     if (seg === 'audit-logs' && method === 'GET') return await listAuditLogs(searchParams)
 
+    // ==================== ATTACHMENTS (RCV-3.0) ====================
+    if (seg === 'attachments') {
+      if (!path[1]) {
+        if (method === 'POST') return await handleAttachmentUpload(request, user)
+        if (method === 'GET') return await handleAttachmentList(searchParams)
+      } else {
+        if (path[2] === 'file' && method === 'GET') return await handleAttachmentFile(path[1])
+        if (method === 'DELETE') return await handleAttachmentDelete(user, path[1])
+      }
+    }
+
     // ==================== BARCODE LOOKUP ====================
     if (seg === 'barcode' && method === 'GET') {
       const code = searchParams.get('code')
@@ -1118,6 +1195,11 @@ async function route(request, ctx) {
           if (!canManageMaster(user.role)) return err('Only Administrator or Supervisor can cancel', 403)
           const body = await parseBody(request)
           try { return json(await cancelReceiving({ user, id, reason: body?.reason })) }
+          catch (e) { return err(e.message, 400) }
+        } else if (sub === 'outstanding' && method === 'POST') {
+          if (!canOperate(user.role)) return err('Insufficient permissions', 403)
+          const body = await parseBody(request)
+          try { return json(await receiveOutstanding({ user, id, lines: body?.lines })) }
           catch (e) { return err(e.message, 400) }
         }
       }

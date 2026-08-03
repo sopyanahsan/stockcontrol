@@ -29,6 +29,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import ImportWizard from '@/components/items/import-wizard'
+import HelpButton from '@/components/help/HelpButton'
 import { Plus, Pencil, Trash2, Loader2, Upload, FileDown, FileSpreadsheet, ChevronDown } from 'lucide-react'
 
 const itemSchema = z.object({
@@ -217,11 +218,14 @@ const App = () => {
       title="Master Item"
       subtitle="Item master data — on-hand quantity is always computed from the Stock Ledger"
       actions={
-        canManage ? (
-          <Button size="sm" className="h-8 bg-blue-600 text-xs hover:bg-blue-700" onClick={openCreate}>
-            <Plus className="mr-1 h-3.5 w-3.5" /> New Item
-          </Button>
-        ) : null
+        <>
+          {canManage ? (
+            <Button size="sm" className="h-8 bg-blue-600 text-xs hover:bg-blue-700" onClick={openCreate}>
+              <Plus className="mr-1 h-3.5 w-3.5" /> New Item
+            </Button>
+          ) : null}
+          <HelpButton pageId="items" />
+        </>
       }
     >
       <DataTable

@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
 import AppShell from '@/components/app-shell'
+import HelpButton from '@/components/help/HelpButton'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -72,6 +73,7 @@ const App = () => {
               <Plus className="mr-1 h-3.5 w-3.5" /> New Order
             </Link>
           </Button>
+          <HelpButton pageId="picking" />
         </div>
       }
     >

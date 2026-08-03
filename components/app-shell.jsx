@@ -9,6 +9,7 @@ import {
   LayoutDashboard, Package, MapPin, Boxes, ClipboardList, Truck, ArrowRightLeft,
   SlidersHorizontal, CalendarCheck, FileSearch, BarChart3, ChevronsLeft, ChevronsRight,
   Search, LogOut, PackageOpen, Warehouse, ScrollText, Ship, Tags, Ruler, Store,
+  BarChart2, TrendingUp,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -60,6 +61,16 @@ const NAV_SECTIONS = [
     items: [
       { href: '/audit-trail', label: 'Audit Trail', icon: FileSearch },
       { href: '/reports', label: 'Reports', icon: BarChart3 },
+    ],
+  },
+  {
+    label: 'Analytics',
+    items: [
+      { href: '/analytics/executive', label: 'Executive Dashboard', icon: BarChart2 },
+      { href: '/analytics/inventory', label: 'Inventory Analytics', icon: Boxes },
+      { href: '/analytics/warehouse', label: 'Warehouse Analytics', icon: Warehouse },
+      { href: '/analytics/suppliers', label: 'Supplier Analytics', icon: Store },
+      { href: '/analytics/trends', label: 'Trend Analytics', icon: TrendingUp },
     ],
   },
 ]

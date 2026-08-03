@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api-client'
 import AppShell from '@/components/app-shell'
 import DataTable from '@/components/data-table'
+import HelpButton from '@/components/help/HelpButton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -219,11 +220,14 @@ const App = () => {
       title="Supplier"
       subtitle="Supplier master data used on Receiving. Suppliers must be active to appear in Receiving."
       actions={
-        canManage ? (
-          <Button size="sm" className="h-8 bg-blue-600 text-xs hover:bg-blue-700" onClick={openCreate}>
-            <Plus className="mr-1 h-3.5 w-3.5" /> New Supplier
-          </Button>
-        ) : null
+        <>
+          {canManage ? (
+            <Button size="sm" className="h-8 bg-blue-600 text-xs hover:bg-blue-700" onClick={openCreate}>
+              <Plus className="mr-1 h-3.5 w-3.5" /> New Supplier
+            </Button>
+          ) : null}
+          <HelpButton pageId="suppliers" />
+        </>
       }
     >
       <DataTable

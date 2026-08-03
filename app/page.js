@@ -4,7 +4,9 @@ export const dynamic = 'force-dynamic'
 
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
+import * as analytics from '@/lib/analytics/client'
 import AppShell from '@/components/app-shell'
+import HelpButton from '@/components/help/HelpButton'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Package, Boxes, DollarSign, AlertTriangle, Activity, MapPin, ClipboardList, Clock, Target, CheckCircle2, PackageCheck, Layers, Store, Users, UserX, UserPlus } from 'lucide-react'
@@ -61,11 +63,30 @@ function PickingCard({ icon: Icon, label, value, sub, accent = 'text-orange-600 
 }
 
 const App = () => {
-  const { data, isLoading } = useQuery({ queryKey: ['dashboard'], queryFn: () => api('/dashboard') })
+  // Dashboard consumes the Analytics Client (→ Analytics API → KPI Engine).
+  const { data: dashboardResponse, isLoading } = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: () => analytics.dashboard(),
+  })
+
+  // The Analytics Client returns the KPI Engine envelope ({ success, generatedAt, data }).
+  // Map engine data into the shape the dashboard renders so the UI is untouched.
+  // Panels not yet covered by the Analytics Engine degrade to empty/zero.
+  const engine = dashboardResponse?.data || {}
+  const data = {
+    metrics: engine,
+    stats: engine.stats || { totalLocations: 0, todayMovements: 0 },
+    picking: engine.picking || {},
+    lowStock: engine.lowStock || [],
+    stockByCategory: engine.stockByCategory || [],
+    movementTrend: engine.movementTrend || [],
+    recentActivity: engine.recentActivity || [],
+  }
+
   const { data: packingData } = useQuery({ queryKey: ['packing-kpis'], queryFn: () => api('/packing/kpis') })
 
   return (
-    <AppShell title="Dashboard" subtitle="Inventory overview — all figures computed live from the Stock Ledger">
+    <AppShell title="Dashboard" subtitle="Inventory overview — all figures computed live from the Stock Ledger" actions={<HelpButton pageId="dashboard" />}>
       {isLoading ? (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -82,10 +103,10 @@ const App = () => {
         <div className="space-y-4">
           {/* KPI cards */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard icon={Package} label="Active SKUs" value={fmt(data?.stats?.totalItems)} sub={`${fmt(data?.stats?.totalLocations)} active locations`} />
-            <StatCard icon={Boxes} label="Stock on Hand" value={fmt(data?.stats?.totalUnits)} sub="units across all locations" accent="text-indigo-600 bg-indigo-50" />
-            <StatCard icon={DollarSign} label="Inventory Value" value={formatCurrency(data?.stats?.totalValue)} sub="at standard cost" accent="text-green-600 bg-green-50" />
-            <StatCard icon={AlertTriangle} label="Low Stock Alerts" value={fmt(data?.stats?.lowStockCount)} sub={`${fmt(data?.stats?.todayMovements)} movements today`} accent="text-amber-600 bg-amber-50" />
+            <StatCard icon={Package} label="Active SKUs" value={fmt(data?.metrics?.activeSku)} sub={`${fmt(data?.stats?.totalLocations)} active locations`} />
+            <StatCard icon={Boxes} label="Stock on Hand" value={fmt(data?.metrics?.stockOnHand)} sub="units across all locations" accent="text-indigo-600 bg-indigo-50" />
+            <StatCard icon={DollarSign} label="Inventory Value" value={formatCurrency(data?.metrics?.inventoryValue)} sub="at standard cost" accent="text-green-600 bg-green-50" />
+            <StatCard icon={AlertTriangle} label="Low Stock Alerts" value={fmt(data?.metrics?.lowStock)} sub={`${fmt(data?.stats?.todayMovements)} movements today`} accent="text-amber-600 bg-amber-50" />
           </div>
 
           {/* Supplier KPIs */}
@@ -95,10 +116,10 @@ const App = () => {
               Supplier Overview
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <PickingCard icon={Store} label="Total Suppliers" value={fmt(data?.suppliers?.total)} sub="registered" accent="text-blue-600 bg-blue-50" />
-              <PickingCard icon={Users} label="Active" value={fmt(data?.suppliers?.active)} sub="usable on Receiving" accent="text-green-600 bg-green-50" />
-              <PickingCard icon={UserX} label="Inactive" value={fmt(data?.suppliers?.inactive)} sub="blocked from Receiving" accent="text-gray-600 bg-gray-100" />
-              <PickingCard icon={UserPlus} label="Added (30d)" value={fmt(data?.suppliers?.recentlyAdded)} sub="last 30 days" accent="text-purple-600 bg-purple-50" />
+              <PickingCard icon={Store} label="Total Suppliers" value={fmt(data?.metrics?.suppliers?.total)} sub="registered" accent="text-blue-600 bg-blue-50" />
+              <PickingCard icon={Users} label="Active" value={fmt(data?.metrics?.suppliers?.active)} sub="usable on Receiving" accent="text-green-600 bg-green-50" />
+              <PickingCard icon={UserX} label="Inactive" value={fmt(data?.metrics?.suppliers?.inactive)} sub="blocked from Receiving" accent="text-gray-600 bg-gray-100" />
+              <PickingCard icon={UserPlus} label="Added (30d)" value={fmt(data?.metrics?.suppliers?.added30Days)} sub="last 30 days" accent="text-purple-600 bg-purple-50" />
             </div>
           </div>
 

@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api-client'
 import AppShell from '@/components/app-shell'
 import DataTable from '@/components/data-table'
+import HelpButton from '@/components/help/HelpButton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -133,11 +134,14 @@ const App = () => {
       title="Master Unit of Measure"
       subtitle="Reusable units of measure — referenced by Master Item"
       actions={
-        canManage ? (
-          <Button size="sm" className="h-8 bg-blue-600 text-xs hover:bg-blue-700" onClick={openCreate}>
-            <Plus className="mr-1 h-3.5 w-3.5" /> New UOM
-          </Button>
-        ) : null
+        <>
+          {canManage ? (
+            <Button size="sm" className="h-8 bg-blue-600 text-xs hover:bg-blue-700" onClick={openCreate}>
+              <Plus className="mr-1 h-3.5 w-3.5" /> New UOM
+            </Button>
+          ) : null}
+          <HelpButton pageId="uoms" />
+        </>
       }
     >
       <DataTable columns={columns} data={uoms} isLoading={isLoading} searchPlaceholder="Search code or name..." exportName="master-uoms" />

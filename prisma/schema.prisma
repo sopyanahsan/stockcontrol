@@ -19,11 +19,13 @@ model User {
   auditLogs                             AuditLog[]
   approvedCycleCounts                   CycleCount[]      @relation("CycleCountApprover")
   assignedCycleCounts                   CycleCount[]      @relation("CycleCountAssignedTo")
+  attachments                           Attachment[]
   cycleCounts                           CycleCount[]      @relation("CycleCountCreator")
   packingOrdersAssigned                 PackingOrder[]    @relation("PackingAssignedTo")
   packingOrdersCreated                  PackingOrder[]    @relation("PackingCreatedBy")
   Receiving_Receiving_createdByIdToUser Receiving[]       @relation("Receiving_createdByIdToUser")
   Receiving_Receiving_postedByIdToUser  Receiving[]       @relation("Receiving_postedByIdToUser")
+  outstandingActivities                ReceivingOutstandingActivity[]
   shipmentsAssigned                     Shipment[]        @relation("ShipmentAssignedTo")
   shipmentsCreated                      Shipment[]        @relation("ShipmentCreatedBy")
   shipmentPackagesVerified              ShipmentPackage[] @relation("ShipmentPackageVerifiedBy")
@@ -80,6 +82,7 @@ model Item {
   putawayTasks         PutawayTask[]
   receivingLines       ReceivingLine[]
   serials              SerialNumber[]
+  outstandingActivities ReceivingOutstandingActivity[]
   stockAdjustmentLines StockAdjustmentLine[]
   ledgerEntries        StockLedger[]
   stockOpnameLines     StockOpnameLine[]
@@ -200,6 +203,33 @@ model AuditLog {
   @@index([userId])
 }
 
+// Reusable Enterprise Attachment (RCV-3.0) — not hardcoded to any module.
+// Module examples: Receiving, Putaway, Movement, Adjustment, Picking, Packing,
+// Shipping, Cycle Count, Stock Opname, Audit.
+model Attachment {
+  id               String   @id @default(uuid())
+  module           String
+  referenceId      String
+  referenceLineId  String?
+  fileName         String
+  originalName     String
+  fileType         String
+  fileSize         Int
+  description      String?
+  uploadedById     String
+  uploadedAt       DateTime @default(now())
+  storageProvider  String   @default("LOCAL")
+  storageKey       String
+  storageUrl       String?
+  isActive         Boolean  @default(true)
+
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+
+  @@index([module, referenceId])
+  @@index([referenceId])
+  @@index([uploadedAt])
+}
+
 model Receiving {
   id                               String          @id @default(uuid())
   grnNumber                        String          @unique
@@ -227,6 +257,7 @@ model Receiving {
   supplierRel                      Supplier?       @relation(fields: [supplierId], references: [id])
   warehouse                        Warehouse       @relation(fields: [warehouseId], references: [id])
   lines                            ReceivingLine[]
+  outstandingActivities            ReceivingOutstandingActivity[]
 
   @@index([status])
   @@index([warehouseId])
@@ -260,18 +291,24 @@ model Supplier {
 }
 
 model ReceivingLine {
-  id           String         @id @default(uuid())
-  receivingId  String
-  itemId       String
-  expectedQty  Float          @default(0)
-  receivedQty  Float          @default(0)
-  unitCost     Float          @default(0)
-  batchNo      String?
-  remarks      String?
-  putawayTasks PutawayTask[]
-  item         Item           @relation(fields: [itemId], references: [id])
-  receiving    Receiving      @relation(fields: [receivingId], references: [id], onDelete: Cascade)
-  serials      SerialNumber[]
+  id             String         @id @default(uuid())
+  receivingId    String
+  itemId         String
+  expectedQty    Float          @default(0)
+  receivedQty    Float          @default(0)
+  unitCost       Float          @default(0)
+  batchNo        String?
+  remarks        String?
+  // Receiving Resolution (RCV-2.4) — variance disposition per line.
+  varianceReason String?
+  resolution     String?
+  outstandingQty Float          @default(0)
+  returnQty      Float          @default(0)
+  putawayTasks   PutawayTask[]
+  item           Item           @relation(fields: [itemId], references: [id])
+  receiving      Receiving      @relation(fields: [receivingId], references: [id], onDelete: Cascade)
+  serials        SerialNumber[]
+  outstandingActivities ReceivingOutstandingActivity[]
 
   @@index([receivingId])
   @@index([itemId])
@@ -292,6 +329,30 @@ model SerialNumber {
 
   @@index([itemId])
   @@index([status])
+}
+
+// Outstanding receipt activity (RCV-2.5) — each "Receive Remaining" action on
+// a Receiving document records the amount received and the outstanding before/after.
+// History belongs to the same GRN — no separate module, no new GRN.
+model ReceivingOutstandingActivity {
+  id                String        @id @default(uuid())
+  receivingLineId   String
+  receivingId       String
+  itemId            String
+  receivedQty       Float
+  outstandingBefore Float
+  outstandingAfter  Float
+  operatorId        String
+  createdAt         DateTime      @default(now())
+
+  line      ReceivingLine @relation(fields: [receivingLineId], references: [id], onDelete: Cascade)
+  receiving Receiving     @relation(fields: [receivingId], references: [id], onDelete: Cascade)
+  item      Item          @relation(fields: [itemId], references: [id])
+  operator  User          @relation(fields: [operatorId], references: [id])
+
+  @@index([receivingId])
+  @@index([receivingLineId])
+  @@index([createdAt])
 }
 
 model PutawayTask {

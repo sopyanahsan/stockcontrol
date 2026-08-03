@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
 import AppShell from '@/components/app-shell'
+import HelpButton from '@/components/help/HelpButton'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -122,9 +123,12 @@ const App = () => {
       title="Cycle Count"
       subtitle="Physical stock verification and variance correction"
       actions={
-        <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={() => { qc.invalidateQueries({ queryKey: ['meta'] }); setCreateOpen(true) }}>
-          <Plus className="mr-1 h-3.5 w-3.5" /> New Cycle Count
-        </Button>
+        <>
+          <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={() => { qc.invalidateQueries({ queryKey: ['meta'] }); setCreateOpen(true) }}>
+            <Plus className="mr-1 h-3.5 w-3.5" /> New Cycle Count
+          </Button>
+          <HelpButton pageId="cycle-count" />
+        </>
       }
     >
       <div className="space-y-4">

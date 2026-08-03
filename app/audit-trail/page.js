@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { api } from '@/lib/api-client'
 import AppShell from '@/components/app-shell'
+import HelpButton from '@/components/help/HelpButton'
 import DataTable from '@/components/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -66,7 +67,7 @@ const App = () => {
   )
 
   return (
-    <AppShell title="Audit Trail" subtitle="Complete traceability — every action in the system is recorded here">
+    <AppShell title="Audit Trail" subtitle="Complete traceability — every action in the system is recorded here" actions={<HelpButton pageId="audit" />}>
       <DataTable
         columns={columns}
         data={logs}

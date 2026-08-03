@@ -2,12 +2,13 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
 import AppShell from '@/components/app-shell'
+import HelpButton from '@/components/help/HelpButton'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -23,9 +24,11 @@ import {
 import {
   Tabs, TabsList, TabsTrigger,
 } from '@/components/ui/tabs'
-import { Plus, PackagePlus, Loader2, ArrowRight } from 'lucide-react'
+import { Plus, PackagePlus, PackageOpen, Loader2, ArrowRight } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
+
+const fmt = (n) => new Intl.NumberFormat('en-US').format(n || 0)
 
 const STATUS_META = {
   DRAFT:            { label: 'Draft',            class: 'bg-gray-100 text-gray-700 border-gray-200' },
@@ -47,6 +50,14 @@ const App = () => {
   })
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: () => api('/meta') })
+
+  // Outstanding Receipt dashboard card (RCV-2.5) — open outstanding across GRNs.
+  const outstandingReceipts = useMemo(() => {
+    const docs = list || []
+    const open = docs.filter((r) => (r.lines || []).some((l) => (l.outstandingQty || 0) > 0))
+    const qty = open.reduce((s, r) => s + (r.lines || []).reduce((ls, l) => ls + (l.outstandingQty || 0), 0), 0)
+    return { count: open.length, qty }
+  }, [list])
 
   const [form, setForm] = useState({ warehouseId: '', supplierId: '', supplier: '', refDocument: '', invoiceNumber: '', vehicleNumber: '', driverName: '', remarks: '' })
 
@@ -80,12 +91,43 @@ const App = () => {
       title="Receiving"
       subtitle="Goods Receipt Notes - stock enters STAGING, then flows to Putaway"
       actions={
-        <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={openCreateDialog}>
-          <Plus className="mr-1 h-4 w-4" /> New Receiving
-        </Button>
+        <>
+          <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={openCreateDialog}>
+            <Plus className="mr-1 h-4 w-4" /> New Receiving
+          </Button>
+          <HelpButton pageId="receiving" />
+        </>
       }
     >
       <div className="space-y-4">
+        {/* Outstanding Receipts dashboard card (RCV-2.5) */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-md border border-blue-200 bg-blue-50/40 p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-gray-500">Outstanding Receipts</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums text-blue-800">{fmt(outstandingReceipts.count)}</div>
+                <div className="mt-0.5 text-[11px] text-gray-400">GRNs with open outstanding</div>
+              </div>
+              <div className="rounded-md bg-blue-100 p-2 text-blue-600">
+                <PackagePlus className="h-4 w-4" />
+              </div>
+            </div>
+          </div>
+          <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-gray-500">Open Outstanding Qty</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums">{fmt(outstandingReceipts.qty)}</div>
+                <div className="mt-0.5 text-[11px] text-gray-400">Awaiting receipt on same GRN</div>
+              </div>
+              <div className="rounded-md bg-indigo-50 p-2 text-indigo-600">
+                <PackageOpen className="h-4 w-4" />
+              </div>
+            </div>
+          </div>
+        </div>
+
         <Tabs value={status} onValueChange={setStatus}>
           <TabsList>
             <TabsTrigger value="ALL">All</TabsTrigger>

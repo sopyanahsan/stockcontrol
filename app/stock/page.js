@@ -6,8 +6,10 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { api } from '@/lib/api-client'
+import * as analytics from '@/lib/analytics/client'
 import { formatCurrency } from '@/lib/currency'
 import AppShell from '@/components/app-shell'
+import HelpButton from '@/components/help/HelpButton'
 import DataTable from '@/components/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -19,6 +21,38 @@ import { Skeleton } from '@/components/ui/skeleton'
 const fmt = (n) => new Intl.NumberFormat('en-US').format(n || 0)
 
 const ALL_VALUE = '__ALL__'
+
+// KPI summary cards — pure presentation, fed by the Analytics Client.
+function StatCard({ label, value, sub, accent = 'text-blue-600 bg-blue-50' }) {
+  return (
+    <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
+      {sub && <div className="mt-0.5 text-[11px] text-gray-400">{sub}</div>}
+    </div>
+  )
+}
+
+function BreakdownCard({ title, breakdown }) {
+  const rows = breakdown || []
+  return (
+    <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="text-xs font-medium text-gray-500">{title}</div>
+      {rows.length ? (
+        <div className="mt-2 space-y-1">
+          {rows.slice(0, 5).map((b) => (
+            <div key={b.category || b.warehouse || b.location} className="flex items-center justify-between gap-2 text-xs">
+              <span className="truncate text-gray-700">{b.category || b.warehouse || b.location || '—'}</span>
+              <span className="tabular-nums text-gray-500">{fmt(b.quantity)}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="py-2 text-xs text-gray-400">No stock</div>
+      )}
+    </div>
+  )
+}
 
 const TXN_COLORS = {
   RECEIVING: 'border-green-200 bg-green-50 text-green-700',
@@ -267,6 +301,19 @@ const App = () => {
   const { data: stock = [], isLoading: stockLoading } = useQuery({ queryKey: ['stock'], queryFn: () => api('/stock') })
   const { data: ledger = [], isLoading: ledgerLoading } = useQuery({ queryKey: ['ledger'], queryFn: () => api('/ledger?limit=200') })
 
+  // Inventory KPIs come from the Analytics Client (Inventory KPI Engine) — the
+  // page never calculates these itself.
+  const { data: analyticsData } = useQuery({
+    queryKey: ['analytics', 'inventory'],
+    queryFn: () => analytics.inventory(),
+  })
+  const inventoryMetrics = analyticsData?.data
+  const summary = inventoryMetrics?.summary || {}
+  const health = inventoryMetrics?.health || {}
+  const categoryBreakdown = inventoryMetrics?.categoryBreakdown || []
+  const warehouseBreakdown = inventoryMetrics?.warehouseBreakdown || []
+  const locationBreakdown = inventoryMetrics?.locationBreakdown || []
+
   const stockColumns = useMemo(
     () => [
       {
@@ -366,7 +413,7 @@ const App = () => {
   )
 
   return (
-    <AppShell title="Stock on Hand" subtitle="Live inventory position — calculated from the Stock Ledger, never stored directly">
+    <AppShell title="Stock on Hand" subtitle="Live inventory position — calculated from the Stock Ledger, never stored directly" actions={<HelpButton pageId="stock" />}>
       <Tabs defaultValue="stock">
         <TabsList className="mb-3 h-8">
           <TabsTrigger value="stock" className="text-xs">Stock on Hand</TabsTrigger>
@@ -374,6 +421,24 @@ const App = () => {
           <TabsTrigger value="card" className="text-xs">Stock Card</TabsTrigger>
         </TabsList>
         <TabsContent value="stock">
+          {/* KPI summary — sourced from the Inventory KPI Engine via Analytics Client */}
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard label="Total SKUs" value={fmt(summary.totalSku)} sub="Active items with stock" />
+            <StatCard label="Total Qty" value={fmt(summary.totalQuantity)} sub="Units on hand" accent="text-indigo-600 bg-indigo-50" />
+            <StatCard label="Inventory Value" value={formatCurrency(summary.inventoryValue)} sub="At unit cost" accent="text-green-600 bg-green-50" />
+            <StatCard label="Avg / SKU" value={fmt(summary.averageStockPerSku)} sub="Average units per SKU" accent="text-amber-600 bg-amber-50" />
+          </div>
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard label="Healthy" value={fmt(health.healthy)} sub="Above reorder point" accent="text-green-600 bg-green-50" />
+            <StatCard label="Low Stock" value={fmt(health.low)} sub="At or below reorder" accent="text-amber-600 bg-amber-50" />
+            <StatCard label="Out of Stock" value={fmt(health.outOfStock)} sub="Zero quantity" accent="text-red-600 bg-red-50" />
+            <StatCard label="Dead Stock" value={fmt(health.deadStock)} sub="No movement" accent="text-gray-600 bg-gray-100" />
+          </div>
+          <div className="mb-4 grid gap-3 sm:grid-cols-3">
+            <BreakdownCard title="By Category" breakdown={categoryBreakdown} />
+            <BreakdownCard title="By Warehouse" breakdown={warehouseBreakdown} />
+            <BreakdownCard title="By Location" breakdown={locationBreakdown} />
+          </div>
           <DataTable
             columns={stockColumns}
             data={stock}
