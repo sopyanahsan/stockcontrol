@@ -25,7 +25,7 @@ import ItemSelector from '@/components/inventory/ItemSelector'
 import AttachmentManager from '@/components/attachments/AttachmentManager'
 import EvidenceCapture from '@/components/evidence/EvidenceCapture'
 import { EVIDENCE_TYPES_LINE } from '@/lib/evidence/evidence-utils'
-import { ArrowLeft, Plus, Trash2, Loader2, Play, Send, Ban, ChevronRight, Barcode, PackageCheck, AlertTriangle, Clock } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Loader2, Play, Send, Ban, ChevronRight, Barcode, PackageCheck, AlertTriangle, Clock, ArrowLeftRight } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/currency'
@@ -120,6 +120,10 @@ const App = ({ params }) => {
   })
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: () => api('/meta') })
   const { data: items } = useQuery({ queryKey: ['items'], queryFn: () => api('/items') })
+  const { data: putawayDocs } = useQuery({
+    queryKey: ['receiving-putaways', id],
+    queryFn: () => api(`/putaway/documents?sourceId=${id}`),
+  })
 
   const isEditable = data?.status === 'DRAFT'
   const isReceiving = data?.status === 'RECEIVING'
@@ -347,6 +351,19 @@ const App = ({ params }) => {
     onError: (e) => toast.error(e.message),
   })
 
+  // ---------- Generate Enterprise Putaway document (PTW-1.0) ----------
+  const genPutawayMut = useMutation({
+    mutationFn: () => api('/putaway/generate', { method: 'POST', body: { receivingId: id } }),
+    onSuccess: (doc) => {
+      toast.success(`Putaway ${doc.putawayNo} generated`)
+      qc.invalidateQueries({ queryKey: ['receiving', id] })
+      qc.invalidateQueries({ queryKey: ['receiving-putaways', id] })
+      qc.invalidateQueries({ queryKey: ['putaway-docs'] })
+      router.push(`/putaway/${doc.id}`)
+    },
+    onError: (e) => toast.error(e.message),
+  })
+
   // ---------- Posting (line receivedQty + serials) ----------
   const [postState, setPostState] = useState({}) // { [lineId]: { receivedQty, serials: [] } }
   const initPostState = () => {
@@ -527,9 +544,15 @@ const App = ({ params }) => {
                   </>
                 )}
                 {data.status === 'WAITING_PUTAWAY' && (
-                  <Button asChild size="sm" variant="outline" className="h-8">
-                    <Link href="/putaway"><PackageCheck className="mr-1 h-3.5 w-3.5" /> View Putaway Tasks</Link>
-                  </Button>
+                  <>
+                    <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={() => genPutawayMut.mutate()} disabled={genPutawayMut.isPending || !!putawayDocs?.length} title={putawayDocs?.length ? 'A putaway already exists for this receiving' : undefined}>
+                      {genPutawayMut.isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <PackageCheck className="mr-1 h-3.5 w-3.5" />}
+                      Generate Putaway
+                    </Button>
+                    <Button asChild size="sm" variant="outline" className="h-8">
+                      <Link href="/putaway/tasks"><ArrowLeftRight className="mr-1 h-3.5 w-3.5" /> View Putaway Tasks</Link>
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
@@ -689,6 +712,33 @@ const App = ({ params }) => {
             </div>
           )}
         </div>
+
+        {/* Generated Putaway documents (PTW-1.0) */}
+        {putawayDocs?.length > 0 && (
+          <div className="rounded-md border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-200 px-4 py-2.5 text-sm font-medium">Generated Putaway Documents</div>
+            <table className="w-full text-[13px]">
+              <thead className="bg-gray-50 text-left text-xs text-gray-500">
+                <tr><th className="px-4 py-2 font-medium">Putaway No</th><th className="px-4 py-2 font-medium">Status</th><th className="px-4 py-2" /></tr>
+              </thead>
+              <tbody>
+                {putawayDocs.map((p) => (
+                  <tr key={p.id} className="border-t border-gray-100">
+                    <td className="px-4 py-2">
+                      <Link href={`/putaway/${p.id}`} className="font-mono text-xs text-blue-600 hover:underline">{p.putawayNo}</Link>
+                    </td>
+                    <td className="px-4 py-2"><Badge variant="outline" className="text-[10px]">{p.status}</Badge></td>
+                    <td className="px-4 py-2 text-right">
+                      <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
+                        <Link href={`/putaway/${p.id}`}>Open <ChevronRight className="ml-1 h-3.5 w-3.5" /></Link>
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Putaway tasks generated */}
         {data.status !== 'DRAFT' && data.lines?.some((l) => l.putawayTasks?.length) && (

@@ -27,6 +27,40 @@ import {
   startPutawayTask,
   completePutawayTask,
   cancelPutawayTask,
+  createPutaway,
+  generateFromReceiving,
+  getPutaway,
+  listPutaway,
+  updatePutaway,
+  releasePutaway,
+  assignOperator,
+  startPutaway,
+  cancelPutaway,
+  startLine,
+  completeLine,
+  skipLine,
+  resumeLine,
+  calculateProgress,
+  getExecutionSummary,
+  suggestLocation,
+  suggestAllLocations,
+  validateCapacity,
+  evaluateFIFO,
+  findAlternativeLocations,
+  selectLineLocation,
+  scoreSuggestions,
+  rankSuggestions,
+  startScanSession,
+  validateLocationScan,
+  validateItemScan,
+  getScanSession,
+  finishScanSession,
+  completeExecution,
+  completePutaway,
+  nextPendingLine,
+  getScanHistory,
+  completeInventoryPosting,
+  getPostingStatus,
 } from '@/lib/putaway-service'
 import {
   listMovements,
@@ -953,6 +987,7 @@ async function listAuditLogs(searchParams) {
   const where = {}
   if (searchParams.get('module')) where.module = searchParams.get('module')
   if (searchParams.get('action')) where.action = searchParams.get('action')
+  if (searchParams.get('entityId')) where.entityId = searchParams.get('entityId')
   const logs = await prisma.auditLog.findMany({ where, orderBy: { createdAt: 'desc' }, take })
   return json(logs)
 }
@@ -1207,7 +1242,140 @@ async function route(request, ctx) {
 
     // ==================== PUTAWAY ====================
     if (seg === 'putaway') {
-      if (!path[1]) {
+      // Enterprise Putaway DOCUMENT routes (PTW-1.0) — keep task routes below intact.
+      if (path[1] === 'generate' && method === 'POST') {
+        if (!canOperate(user.role)) return err('Insufficient permissions', 403)
+        const body = await parseBody(request)
+        try { return json(await generateFromReceiving({ user, receivingId: body?.receivingId, body }), 201) }
+        catch (e) { return err(e.message, 400) }
+      }
+      if (path[1] === 'documents') {
+        if (!path[2]) {
+          if (method === 'GET') {
+            const docs = await listPutaway({
+              status: searchParams.get('status') || undefined,
+              warehouseId: searchParams.get('warehouseId') || undefined,
+              sourceId: searchParams.get('sourceId') || undefined,
+              operatorId: searchParams.get('operatorId') || undefined,
+              priority: searchParams.get('priority') || undefined,
+              search: searchParams.get('search') || undefined,
+              take: getLimit(searchParams),
+            })
+            return json(docs)
+          }
+          if (method === 'POST') {
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
+            const body = await parseBody(request)
+            try { return json(await createPutaway({ user, body }), 201) }
+            catch (e) { return err(e.message, 400) }
+          }
+        } else {
+          const did = path[2]
+          const sub = path[3]
+          if (!sub) {
+            if (method === 'GET') {
+              const doc = await getPutaway(did)
+              if (!doc) return err('Putaway not found', 404)
+              return json(doc)
+            }
+            if (method === 'PUT') {
+              if (!canOperate(user.role)) return err('Insufficient permissions', 403)
+              const body = await parseBody(request)
+              try { return json(await updatePutaway({ user, id: did, body })) }
+              catch (e) { return err(e.message, 400) }
+            }
+          } else if (sub === 'release' && method === 'POST') {
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
+            try { return json(await releasePutaway({ user, id: did })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'assign' && method === 'POST') {
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
+            const body = await parseBody(request)
+            try { return json(await assignOperator({ user, id: did, body })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'start' && method === 'POST') {
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
+            try { return json(await startPutaway({ user, id: did })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'progress' && method === 'GET') {
+            try { return json(await calculateProgress({ id: did })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'execution-summary' && method === 'GET') {
+            try { return json(await getExecutionSummary({ id: did })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'suggestions' && method === 'GET') {
+            try { return json(await suggestAllLocations({ id: did })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'lines' && path[4] && path[5]) {
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
+            const lineId = path[4]
+            const op = path[5]
+            if (op === 'suggestions' && method === 'GET') {
+              try { return json(await suggestLocation({ user, id: did, lineId })) }
+              catch (e) { return err(e.message, 400) }
+            }
+            if (op === 'recommendation' && method === 'GET') {
+              try { return json(await scoreSuggestions({ user, id: did, lineId })) }
+              catch (e) { return err(e.message, 400) }
+            }
+            if (op === 'complete-execution' && method === 'POST') {
+              const body = await parseBody(request)
+              try { return json(await completeExecution({ user, id: did, lineId })) }
+              catch (e) { return err(e.message, 400) }
+            }
+            if (op === 'select-location' && method === 'POST') {
+              const body = await parseBody(request)
+              try { return json(await selectLineLocation({ user, id: did, lineId, locationId: body?.locationId, mode: body?.mode })) }
+              catch (e) { return err(e.message, 400) }
+            }
+            const body = await parseBody(request)
+            try {
+              const fn = op === 'start' ? startLine : op === 'complete' ? completeLine : op === 'skip' ? skipLine : op === 'resume' ? resumeLine : null
+              if (!fn) return err('Not found', 404)
+              return json(await fn({ user, id: did, lineId, remark: body?.remark }))
+            } catch (e) { return err(e.message, 400) }
+          } else if (sub === 'start-session' && method === 'POST') {
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
+            try { return json(await startScanSession({ user, id: did })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'session' && method === 'GET') {
+            try { return json(await getScanSession({ id: did })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'next-line' && method === 'GET') {
+            try { return json(await nextPendingLine({ id: did })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'scan-history' && method === 'GET') {
+            try { return json(await getScanHistory({ id: did })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'complete' && method === 'POST') {
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
+            try { return json(await completePutaway({ user, id: did })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'post' && method === 'POST') {
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
+            try { return json(await completeInventoryPosting({ user, id: did })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'post-status' && method === 'GET') {
+            try { return json(await getPostingStatus({ id: did })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'scan' && path[4] === 'location' && method === 'POST') {
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
+            const body = await parseBody(request)
+            try { return json(await validateLocationScan({ user, id: did, body })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'scan' && path[4] === 'item' && method === 'POST') {
+            if (!canOperate(user.role)) return err('Insufficient permissions', 403)
+            const body = await parseBody(request)
+            try { return json(await validateItemScan({ user, id: did, body })) }
+            catch (e) { return err(e.message, 400) }
+          } else if (sub === 'cancel' && method === 'POST') {
+            if (!canManageMaster(user.role)) return err('Only Administrator or Supervisor can cancel', 403)
+            const body = await parseBody(request)
+            try { return json(await cancelPutaway({ user, id: did, reason: body?.reason })) }
+            catch (e) { return err(e.message, 400) }
+          }
+        }
+      } else if (!path[1]) {
         if (method === 'GET') {
           const tasks = await listPutawayTasks({
             status: searchParams.get('status') || undefined,

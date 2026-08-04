@@ -93,6 +93,9 @@ afterEach(async () => {
     // 5c. Receiving after ReceivingLine (Receiving carries Location + Warehouse RESTRICT FKs)
     await tx.$executeRaw`DELETE FROM "Receiving" WHERE "warehouseId" IN (SELECT id FROM "Warehouse" WHERE "code" = ${WH_CODE})`
 
+    // 5d. Enterprise Putaway documents (PTW-1.0). PutawayLine cascades on delete.
+    await tx.$executeRaw`DELETE FROM "Putaway" WHERE "sourceId" IN (SELECT id FROM "Receiving" WHERE "warehouseId" IN (SELECT id FROM "Warehouse" WHERE "code" = ${WH_CODE}))`
+
     // 5d. Suppliers created by seed users / with seed key in code or name.
     //     Receiving rows referencing them were removed above, so this can't trip the FK.
     await tx.$executeRaw`DELETE FROM "Supplier" WHERE "name" LIKE ${'%' + SEED_KEY + '%'} OR "code" LIKE ${'%' + SEED_KEY + '%'}`

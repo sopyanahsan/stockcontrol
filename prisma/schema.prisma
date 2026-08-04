@@ -120,6 +120,7 @@ model Location {
   type                 LocationType          @default(STORAGE)
   isActive             Boolean               @default(true)
   name                 String                @default("")
+  maxCapacity          Float                 @default(0)
   cycleCountLines      CycleCountLine[]
   fifoLayers           FifoLayer[]
   zone                 Zone                  @relation(fields: [zoneId], references: [id])
@@ -380,6 +381,113 @@ model PutawayTask {
 
   @@index([status])
   @@index([receivingId])
+}
+
+// ============================================================
+// Enterprise Putaway Document (PTW-1.0) — header + lines.
+// Snapshots of receiving lines; NO inventory movement at this
+// stage (Draft -> Released -> future In Progress -> Completed).
+// sourceId/sourceNumber point at the originating Receiving.
+// ============================================================
+model Putaway {
+  id                String          @id @default(uuid())
+  putawayNo         String          @unique
+  sourceType        String          @default("RECEIVING")
+  sourceId          String
+  sourceNumber      String
+  warehouseId       String
+  warehouseName     String
+  status            PutawayStatus   @default(DRAFT)
+  priority          PutawayPriority @default(NORMAL)
+  operatorId        String?
+  remarks           String?
+  createdBy         String
+  // PTW-1.3 assignment & execution prep — no inventory movement yet.
+  assignedTo        String?
+  assignedName      String?
+  assignedAt        DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  estimatedDuration Int?
+  // PTW-4/5 inventory posting marker (posted once, atomically).
+  postedAt          DateTime?
+  postedById        String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  lines             PutawayLine[]
+
+  @@index([status])
+  @@index([sourceId])
+  @@index([warehouseId])
+  @@index([assignedTo])
+  @@index([createdAt])
+}
+
+model PutawayLine {
+  id               String             @id @default(uuid())
+  putawayId        String
+  lineNo           Int
+  itemId           String
+  sku              String
+  barcode          String?
+  itemName         String
+  batchNo          String?
+  expiryDate       DateTime?
+  uom              String?
+  qty              Float
+  qtyCompleted     Float              @default(0)
+  sourceLocationId String?
+  targetLocationId String?
+  // PTW-1.4 execution fields — inventory is NOT touched.
+  startedAt        DateTime?
+  completedAt      DateTime?
+  executedBy       String?
+  executedByName   String?
+  executionRemark  String?
+  executionSequence Int?
+  status           PutawayLineStatus  @default(WAITING)
+  remarks          String?
+  putaway          Putaway            @relation(fields: [putawayId], references: [id], onDelete: Cascade)
+
+  @@index([putawayId])
+}
+
+// PTW-3.4/3.5 — scan history: records EVERY scan (success, warning, error).
+model PutawayScanHistory {
+  id               String   @id @default(uuid())
+  sessionId        String
+  putawayId        String
+  lineId           String?
+  scanType         String
+  scannedValue     String
+  validationCode   String?
+  validationStatus String
+  expectedValue    String?
+  actualValue      String?
+  device           String?
+  createdAt        DateTime @default(now())
+
+  @@index([putawayId])
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+// PTW-3.x — Barcode execution scan session (validation only, no inventory writes).
+model PutawayScanSession {
+  id               String    @id @default(uuid())
+  putawayId        String
+  lineId           String?
+  targetLocationId String?
+  lastScan         String?
+  lastScanType     String?
+  lastScanStatus   String?
+  locationValidated Boolean @default(false)
+  scanCount        Int       @default(0)
+  startedAt        DateTime  @default(now())
+  finishedAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([putawayId])
 }
 
 model DocumentSequence {
@@ -831,6 +939,14 @@ enum PutawayTaskStatus {
   CANCELLED
 }
 
+enum PutawayLineStatus {
+  WAITING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
 enum SerialStatus {
   IN_STAGING
   IN_STOCK
@@ -848,6 +964,22 @@ enum DocStatus {
   ASSIGNED
   IN_PROGRESS
   SUBMITTED
+}
+
+enum PutawayStatus {
+  DRAFT
+  RELEASED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PutawayPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
 }
 
 enum ReasonType {

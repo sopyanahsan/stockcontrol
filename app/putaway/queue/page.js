@@ -16,13 +16,14 @@ import { ErrorState } from '@/components/ErrorState'
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '@/components/ui/select'
-import { PackageCheck, ArrowRight, ArrowLeftRight, ListChecks } from 'lucide-react'
+import { ListChecks, ArrowRight, ArrowLeftRight } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
 
 const STATUS_META = {
   DRAFT:      { label: 'Draft',      class: 'bg-gray-100 text-gray-700 border-gray-200' },
   RELEASED:   { label: 'Released',   class: 'bg-blue-100 text-blue-700 border-blue-200' },
+  ASSIGNED:   { label: 'Assigned',   class: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
   IN_PROGRESS:{ label: 'In Progress',class: 'bg-amber-100 text-amber-700 border-amber-200' },
   COMPLETED:  { label: 'Completed',  class: 'bg-green-100 text-green-700 border-green-200' },
   CANCELLED:  { label: 'Cancelled',  class: 'bg-red-100 text-red-700 border-red-200' },
@@ -38,38 +39,41 @@ const PRIORITY_META = {
 const App = () => {
   const [status, setStatus] = useState('ALL')
   const [warehouseId, setWarehouseId] = useState('ALL')
+  const [operatorId, setOperatorId] = useState('ALL')
+  const [priority, setPriority] = useState('ALL')
   const [search, setSearch] = useState('')
-  const [query, setQuery] = useState({ status: 'ALL', warehouseId: 'ALL', search: '' })
+  const [query, setQuery] = useState({ status: 'ALL', warehouseId: 'ALL', operatorId: 'ALL', priority: 'ALL', search: '' })
 
   const qs = new URLSearchParams()
   if (query.status !== 'ALL') qs.set('status', query.status)
   if (query.warehouseId !== 'ALL') qs.set('warehouseId', query.warehouseId)
+  if (query.operatorId !== 'ALL') qs.set('operatorId', query.operatorId)
+  if (query.priority !== 'ALL') qs.set('priority', query.priority)
   if (query.search) qs.set('search', query.search)
 
   const { data: list, isLoading, error, refetch } = useQuery({
-    queryKey: ['putaway-docs', query],
+    queryKey: ['putaway-queue', query],
     queryFn: () => api(`/putaway/documents${qs.toString() ? `?${qs.toString()}` : ''}`),
   })
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: () => api('/meta') })
   const warehouses = meta?.warehouses || []
-  const operatorNames = Object.fromEntries((meta?.users || []).map((u) => [u.id, u.name]))
 
-  const applyFilters = () => setQuery({ status, warehouseId, search: search.trim() })
+  const applyFilters = () => setQuery({ status, warehouseId, operatorId, priority, search: search.trim() })
 
   return (
     <AppShell
-      title="Putaway"
-      subtitle="Putaway documents generated from posted receiving"
+      title="Putaway Queue"
+      subtitle="Assigned putaways ready for execution"
       actions={
         <div className="flex items-center gap-2">
           <Button asChild variant="outline" size="sm" className="h-8">
-            <Link href="/putaway/queue"><ListChecks className="mr-1 h-3.5 w-3.5" /> Queue</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm" className="h-8">
             <Link href="/putaway/tasks"><ArrowLeftRight className="mr-1 h-3.5 w-3.5" /> Task Queue</Link>
           </Button>
-          <HelpButton pageId="putaway" />
+          <Button asChild variant="outline" size="sm" className="h-8">
+            <Link href="/putaway"><ArrowRight className="mr-1 h-3.5 w-3.5" /> All Documents</Link>
+          </Button>
+          <HelpButton pageId="putaway-queue" />
         </div>
       }
     >
@@ -86,29 +90,46 @@ const App = () => {
               className="h-9 text-sm"
             />
           </div>
-          <div className="w-44">
+          <div className="w-40">
             <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">Status</div>
             <Select value={status} onValueChange={(v) => { setStatus(v); setQuery((q) => ({ ...q, status: v })) }}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All</SelectItem>
-                <SelectItem value="DRAFT">Draft</SelectItem>
                 <SelectItem value="RELEASED">Released</SelectItem>
+                <SelectItem value="ASSIGNED">Assigned</SelectItem>
                 <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
                 <SelectItem value="COMPLETED">Completed</SelectItem>
-                <SelectItem value="CANCELLED">Cancelled</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className="w-52">
+          <div className="w-48">
             <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">Warehouse</div>
             <Select value={warehouseId} onValueChange={(v) => { setWarehouseId(v); setQuery((q) => ({ ...q, warehouseId: v })) }}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All</SelectItem>
-                {warehouses.map((w) => (
-                  <SelectItem key={w.id} value={w.id}>{w.code} - {w.name}</SelectItem>
-                ))}
+                {warehouses.map((w) => <SelectItem key={w.id} value={w.id}>{w.code} - {w.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-48">
+            <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">Operator</div>
+            <Select value={operatorId} onValueChange={(v) => { setOperatorId(v); setQuery((q) => ({ ...q, operatorId: v })) }}>
+              <SelectTrigger className="h-9"><SelectValue placeholder="All operators" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All</SelectItem>
+                {(meta?.users || []).map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-36">
+            <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">Priority</div>
+            <Select value={priority} onValueChange={(v) => { setPriority(v); setQuery((q) => ({ ...q, priority: v })) }}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All</SelectItem>
+                {['LOW', 'NORMAL', 'HIGH', 'URGENT'].map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -122,14 +143,14 @@ const App = () => {
             </div>
           ) : error ? (
             <div className="p-4">
-              <ErrorState error={error} onRetry={() => refetch()} title="Failed to load putaway documents" />
+              <ErrorState error={error} onRetry={() => refetch()} title="Failed to load putaway queue" />
             </div>
           ) : !list?.length ? (
             <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center">
-              <PackageCheck className="h-8 w-8 text-gray-300" />
-              <div className="text-sm font-medium text-gray-500">No putaway documents</div>
+              <ListChecks className="h-8 w-8 text-gray-300" />
+              <div className="text-sm font-medium text-gray-500">No putaways in queue</div>
               <div className="text-xs text-gray-400">
-                Putaway documents are generated from a posted receiving (GRN) using "Generate Putaway".
+                Release a putaway document, then assign an operator to see it here.
               </div>
             </div>
           ) : (
@@ -137,44 +158,42 @@ const App = () => {
               <thead className="bg-gray-50 text-left text-xs text-gray-500">
                 <tr>
                   <th className="px-4 py-2 font-medium">Putaway No</th>
-                  <th className="px-4 py-2 font-medium">Source GRN</th>
                   <th className="px-4 py-2 font-medium">Warehouse</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
+                  <th className="px-4 py-2 font-medium">Operator</th>
                   <th className="px-4 py-2 font-medium">Priority</th>
-                  <th className="px-4 py-2 font-medium">Lines</th>
+                  <th className="px-4 py-2 font-medium">Status</th>
                   <th className="px-4 py-2 font-medium">Created</th>
+                  <th className="px-4 py-2 font-medium">Started</th>
+                  <th className="px-4 py-2 text-right font-medium">Est. Time</th>
                   <th className="px-4 py-2" />
                 </tr>
               </thead>
               <tbody>
                 {list.map((doc) => {
-                  const meta = STATUS_META[doc.status] || { label: doc.status, class: 'bg-gray-100 text-gray-700' }
+                  const sm = STATUS_META[doc.status] || { label: doc.status, class: 'bg-gray-100 text-gray-700' }
                   const pm = PRIORITY_META[doc.priority] || { label: doc.priority, class: 'text-gray-700' }
                   return (
                     <tr key={doc.id} className="border-t border-gray-100 hover:bg-gray-50">
                       <td className="px-4 py-2 font-mono text-xs">{doc.putawayNo}</td>
-                      <td className="px-4 py-2">
-                        {doc.sourceId ? (
-                          <Link href={`/receiving/${doc.sourceId}`} className="font-mono text-xs text-blue-600 hover:underline">
-                            {doc.sourceNumber}
-                          </Link>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
                       <td className="px-4 py-2 text-xs text-gray-600">{doc.warehouseName}</td>
-                      <td className="px-4 py-2">
-                        <Badge variant="outline" className={`${meta.class} text-[10px]`}>{meta.label}</Badge>
-                      </td>
+                      <td className="px-4 py-2 text-xs">{doc.assignedName || '—'}</td>
                       <td className={cn('px-4 py-2 text-xs font-medium', pm.class)}>{pm.label}</td>
-                      <td className="px-4 py-2 tabular-nums text-xs text-gray-500">{doc._count?.lines || 0}</td>
+                      <td className="px-4 py-2">
+                        <Badge variant="outline" className={`${sm.class} text-[10px]`}>{sm.label}</Badge>
+                      </td>
                       <td className="px-4 py-2 text-xs text-gray-500">
                         {formatDistanceToNow(new Date(doc.createdAt), { addSuffix: true })}
+                      </td>
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        {doc.startedAt ? formatDistanceToNow(new Date(doc.startedAt), { addSuffix: true }) : '—'}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums text-xs text-gray-600">
+                        {doc.estimatedDuration ? `${doc.estimatedDuration} min` : '—'}
                       </td>
                       <td className="px-4 py-2 text-right">
                         <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
                           <Link href={`/putaway/${doc.id}`}>
-                            {doc.status === 'DRAFT' ? 'Open' : 'View'} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                            Open <ArrowRight className="ml-1 h-3.5 w-3.5" />
                           </Link>
                         </Button>
                       </td>

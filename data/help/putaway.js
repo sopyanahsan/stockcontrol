@@ -24,9 +24,11 @@ export default {
     'Stock berada di lokasi penyimpanan',
   ],
   documentStatus: [
-    { label: 'Draft', description: 'Dokumen masih dapat diubah.' },
-    { label: 'Started', description: 'Proses pemindahan barang sedang berlangsung.' },
-    { label: 'Posted', description: 'Barang telah berada pada lokasi tujuan. Dokumen tidak dapat diubah kembali.' },
+    { label: 'Draft', description: 'Dokumen masih dapat diubah (prioritas, operator, lokasi tujuan).' },
+    { label: 'Released', description: 'Dokumen dikunci dan siap diproses. Eksekusi menyusul.' },
+    { label: 'In Progress', description: 'Proses pemindahan barang sedang berlangsung.' },
+    { label: 'Completed', description: 'Barang telah berada pada lokasi tujuan.' },
+    { label: 'Cancelled', description: 'Dokumen dibatalkan. GRN dapat membuat putaway baru.' },
   ],
   bestPractices: [
     'Pastikan lokasi tujuan benar.',
