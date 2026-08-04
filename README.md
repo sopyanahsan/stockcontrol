@@ -1,444 +1,433 @@
-# Enterprise Stock Control & Warehouse Management System (WMS)
+# 📦 WMS Enterprise
 
-> **Version:** v0.9.7
-> **Status:** Release Candidate — preparing v1.0.0
-> **Current Milestone:** Milestone 9 — Stock Opname & Production Hardening (Complete)
+> Modern Enterprise Warehouse Management System built with Next.js, Prisma, PostgreSQL (Neon), React Query and Cloudinary.
+
+![Version](https://img.shields.io/badge/version-v1.5.0-blue)
+![Status](https://img.shields.io/badge/status-Stable-success)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
 # Overview
 
-Enterprise Stock Control & Warehouse Management System (WMS) is a modern warehouse management application designed to ensure inventory accuracy, warehouse traceability, and end-to-end stock visibility.
+WMS Enterprise is a modern Warehouse Management System designed to manage the complete warehouse lifecycle:
 
-This project is **NOT** an ERP.
+Inbound
 
-Its primary focus is warehouse operations, inventory management, and complete stock traceability using Stock Ledger and FIFO principles.
+Purchase Order
+→ Receiving
+→ Putaway
 
----
+Outbound
 
-# Project Objectives
+Sales Order
+→ Picking
+→ Packing
+→ Shipping
 
-- Improve Inventory Accuracy
-- Warehouse Process Automation
-- FIFO Inventory Management
-- Barcode-Based Operations
-- Serial Number Tracking
-- Complete Audit Trail
-- Real-Time Stock Visibility
-- End-to-End Traceability
+Inventory
 
----
+Stock Ledger
 
-# Business Workflow
+FIFO
 
-```
-Supplier
-    │
-    ▼
-Receiving
-    │
-    ▼
-STAGING
-    │
-    ▼
-Putaway
-    │
-    ▼
-Warehouse Bin
-    │
-    ▼
-Movement
-    │
-    ▼
-Adjustment / Cycle Count
-    │
-    ▼
-Picking
-    │
-    ▼
-Packing
-    │
-    ▼
-Shipping
-    │
-    ▼
-Customer
-```
+Stock On Hand
 
-Every inventory transaction is recorded in the **Stock Ledger** and protected by **Audit Trail**.
+Warehouse Location
+
+Analytics
+
+Audit Trail
 
 ---
 
-# Completed Milestones
-
-| Milestone | Module | Status |
-|------------|--------|--------|
-| M1 | Core Foundation | ✅ Complete |
-| M2 | Putaway | ✅ Complete |
-| M3 | Stock Movement | ✅ Complete |
-| M4 | Stock Adjustment & Cycle Count | ✅ Complete |
-| M5 | Picking | ✅ Complete |
-| M6 | Packing | ✅ Complete |
-| M7 | Shipping | ✅ Complete |
-| M8 | Reports & Analytics | ✅ Complete |
-| M9 | Stock Opname & Production Hardening | ✅ Complete |
-| v1.0.0 | Stable Release (hardening, docs, release readiness) | 🔄 In Progress |
-
----
-
-# Core Modules
-
-## Security
-
-- Authentication
-- Role-Based Access Control (RBAC)
-
----
+# Features
 
 ## Master Data
 
-- Master Item
+- Warehouse
+- Zone
 - Warehouse Location
+- Supplier
+- Item
+- Category
+- UOM
+- User
+- Roles
 
 ---
 
-## Warehouse Operations
+## Warehouse Location
 
-### Inbound
+- CRUD
+- Archive / Restore
+- Barcode
+- QR Code
+- Print Label
+- Occupancy
+- Capacity Monitoring
+- Validation Engine
+- Dependency Engine
 
-- Receiving
-- Putaway
+---
 
-### Internal
+## Receiving
 
-- Stock Movement
+- Draft
+- Receiving Workflow
+- Variance Resolution
+- Outstanding
+- Batch / Lot
+- Header Attachment
+- Line Evidence
+- Camera Capture
+- Image Gallery
+- Thumbnail Preview
+
+---
+
+## Putaway
+
+- Putaway Document
+- Putaway Tasks
+- Smart Location
+- Barcode Scan
+- Item Scan
+- Auto Inventory Posting
+
+---
+
+## Picking
+
+- FIFO Allocation
+- Picking Order
+- Picking Tasks
+- Barcode Validation
+- Location Validation
+- Item Validation
+
+---
+
+## Packing
+
+- Package Management
+- Package Allocation
+- Packing Completion
+
+---
+
+## Shipping
+
+- Shipment Queue
+- Shipment Confirmation
+- Stock OUT Posting
+- FIFO Consumption
+
+---
+
+## Inventory
+
+- Stock Ledger
+- FIFO Layer
 - Stock Adjustment
 - Cycle Count
 - Stock Opname
-
-### Outbound
-
-- Picking
-- Packing
-- Shipping
+- Stock Transfer
 
 ---
 
-## Inventory Engine
+## Analytics
 
-- Stock Ledger
-- FIFO Engine
-- Barcode Service
-- Audit Trail
-- Document Number Generator
+- Warehouse Analytics
+- Inventory Analytics
+- Trend Analytics
 
 ---
 
-# Technology Stack
+# Enterprise Workflow
+
+```text
+Purchase Order
+        │
+        ▼
+Receiving
+        │
+        ▼
+Waiting Putaway
+        │
+        ▼
+Putaway
+        │
+        ▼
+Inventory
+        │
+        ▼
+Sales Order
+        │
+        ▼
+Picking
+        │
+        ▼
+Packing
+        │
+        ▼
+Shipping
+        │
+        ▼
+Stock OUT
+```
+
+---
+
+# Tech Stack
 
 ## Frontend
 
-- Next.js 15 (App Router)
-- React 18
-- Tailwind CSS
-- Radix UI
+- Next.js 15
+- React 19
+- TailwindCSS
+- TanStack Query
 - React Hook Form
-- TanStack React Query
-- Recharts
-
----
+- Zod
 
 ## Backend
 
-- Next.js API Routes
-- Service Layer Architecture
-- REST API
-
----
-
-## Database
-
-- Neon PostgreSQL
-
----
-
-## ORM
-
+- Next.js Route Handlers
 - Prisma ORM
+- PostgreSQL (Neon)
+
+## Storage
+
+- Cloudinary
+
+## Authentication
+
+- JWT
+- Role Based Access Control
 
 ---
 
-# Project Structure
+# Architecture
 
 ```
 app/
 components/
 lib/
-memory/
 prisma/
-scripts/
-tests/
+public/
 
-README.md
-CLAUDE.md
-package.json
+Receiving
+Putaway
+Picking
+Packing
+Shipping
+
+Validation Engines
+
+Location Engine
+Occupancy Engine
+Identification Engine
+Label Engine
+Attachment Engine
+Evidence Engine
 ```
 
 ---
 
-# Core Services
+# Validation Engines
 
-```
-receiving-service.js
-putaway-service.js
-movement-service.js
-adjustment-service.js
-cycle-count-service.js
-picking-service.js
-packing-service.js
-shipping-service.js
-stock-opname-service.js
-
-fifo-service.js
-stock-validation.js
-stock.js
-barcode-service.js
-audit.js
-doc-numbering.js
-
-# Reports Services
-
-dashboard-report.js
-inventory-report.js
-operations-report.js
-audit-report.js
-export-service.js
-```
-
-These services contain all business logic.
-
-UI should never duplicate business rules.
+- Warehouse Validation
+- Zone Validation
+- Location Validation
+- Capacity Validation
+- Barcode Validation
+- Evidence Validation
+- Attachment Validation
 
 ---
 
-# Architecture Principles
+# Warehouse Location
 
-The project follows these architectural principles:
+Supports
 
-- Stock Ledger is the Single Source of Truth.
-- Inventory MUST NEVER be updated directly.
-- FIFO allocation is mandatory.
-- Every inventory transaction generates Stock Ledger entries.
-- Every business transaction generates an Audit Trail.
-- Barcode-first warehouse workflow.
-- Feature-based modular architecture.
-- Service Layer pattern.
-- Atomic database transactions using Prisma.
-- End-to-End inventory traceability.
+- Barcode
+- QR Code
+- Label Printing
+- Occupancy
+- Remaining Capacity
+- Utilization
+- Smart Recommendation
 
 ---
 
-# Local Development
+# Attachment
 
-## 1. Install Dependencies
+Document Attachment
+
+- Purchase Order
+- Invoice
+- Delivery Order
+- Other
+
+Evidence
+
+- Upload Image
+- Camera
+- Preview
+- Gallery
+- Thumbnail
+
+---
+
+# Storage
+
+Cloudinary
+
+Images
+
+Evidence
+
+Attachments
+
+Automatic Thumbnail
+
+---
+
+# Inventory Engine
+
+Stock Ledger Driven
+
+Inventory is never stored directly.
+
+Stock On Hand
+
+=
+
+SUM(Stock Ledger)
+
+FIFO Layer
+
+=
+
+Automatic
+
+---
+
+# Lifecycle Synchronization
+
+Receiving
+
+↓
+
+Putaway
+
+↓
+
+Inventory
+
+↓
+
+Picking
+
+↓
+
+Packing
+
+↓
+
+Shipping
+
+↓
+
+Stock Ledger OUT
+
+---
+
+# Current Version
+
+## v1.5.0
+
+### Added
+
+- Warehouse Location Management
+- Occupancy Engine
+- Barcode Engine
+- QR Engine
+- Label Service
+- Enterprise Receiving
+- Enterprise Putaway
+- Enterprise Picking
+- Enterprise Packing
+- Enterprise Shipping
+
+### Improved
+
+- Validation Engine
+- Attachment Engine
+- Evidence Engine
+- Lifecycle Synchronization
+- Transaction Safety
+
+### Fixed
+
+- Evidence Upload
+- Header vs Line Attachment
+- Camera Upload
+- Barcode
+- QR
+- Print Label
+- Putaway Scanner
+- Picking Validation
+- Packing Workflow
+- Shipping Lifecycle
+
+---
+
+# Roadmap
+
+## v1.6
+
+- Dashboard Improvements
+- Inventory KPI
+- Wave Picking
+- Replenishment
+- Return Management
+- ASN
+- Cross Docking
+
+---
+
+# Build
 
 ```bash
 npm install
-```
 
----
-
-## 2. Environment Variables
-
-Copy the template:
-
-```bash
-cp .env.example .env
-```
-
-Then fill in the values in `.env`:
-
-```env
-DATABASE_URL="postgresql://..."
-JWT_SECRET="your-secret"
-NODE_ENV="development"
-```
-
-Optional:
-
-```env
-CORS_ORIGINS="https://app.example.com"
-```
-
----
-
-## 3. Generate Prisma Client
-
-```bash
 npx prisma generate
-```
 
----
-
-## 4. Sync Database
-
-```bash
-npx prisma db push
-```
-
----
-
-## 5. Run Development Server
-
-```bash
 npm run dev
 ```
 
-Open:
-
-```
-http://localhost:3000
-```
-
-> On Windows, `npm run dev` sets a Linux-style `NODE_OPTIONS`; use `npm run dev:no-reload` instead.
-
 ---
 
-## 6. Production Build
+# Production
 
 ```bash
 npm run build
+
 npm start
 ```
 
 ---
 
-# Development Rules
-
-Always reuse existing services.
-
-Never duplicate business logic.
-
-Never bypass:
-
-- Stock Ledger
-- FIFO Engine
-- Audit Trail
-
-Never update inventory directly.
-
-All inventory changes must occur through existing services.
-
----
-
-# Reports
-
-Reports are READ ONLY.
-
-Reports must never:
-
-- modify inventory
-- modify stock ledger
-- modify FIFO
-- modify audit logs
-
-Reports consume existing business data only.
-
----
-
-# Testing
-
-Acceptance tests are located in:
-
-```
-tests/
-```
-
-Run the full suite (serially, against a seeded Neon database):
-
-```bash
-npm test -- --runInBand
-```
-
-Current completed modules include:
-
-- Receiving
-- Putaway
-- Movement
-- Adjustment
-- Cycle Count
-- Picking
-- Packing
-- Shipping
-- Reports & Analytics
-
----
-
-# Memory Documentation
-
-Project knowledge is stored in:
-
-```
-memory/
-```
-
-| File | Purpose |
-|------|---------|
-| 00_PROJECT_OVERVIEW.md | High-level project overview |
-| 01_ARCHITECTURE.md | System architecture |
-| 02_BUSINESS_RULES.md | Warehouse business rules |
-| 03_DATABASE_RULES.md | Database standards |
-| 04_CODING_RULES.md | Coding conventions |
-| 05_PROJECT_STATUS.md | Current project status |
-| 06_NEXT_TASK.md | Upcoming milestones |
-| 07_DO_NOT_CHANGE.md | Protected architecture |
-| 08_ACCEPTANCE_TEST.md | Acceptance test history |
-| 09_KNOWN_ISSUES.md | Known issues |
-| 10_RELEASE_NOTES.md | Release history |
-
----
-
-# Documentation Priority
-
-Every AI assistant or developer joining this project should read documents in the following order:
-
-1. README.md
-2. CLAUDE.md
-3. memory/00_PROJECT_OVERVIEW.md
-4. memory/01_ARCHITECTURE.md
-5. memory/02_BUSINESS_RULES.md
-6. memory/03_DATABASE_RULES.md
-7. memory/04_CODING_RULES.md
-8. memory/05_PROJECT_STATUS.md
-9. memory/06_NEXT_TASK.md
-10. memory/07_DO_NOT_CHANGE.md
-11. memory/08_ACCEPTANCE_TEST.md
-12. memory/09_KNOWN_ISSUES.md
-13. memory/10_RELEASE_NOTES.md
-
----
-
-## Running Tests
-
-The Jest suite requires a dedicated test database.
-
-Create:
-
-.env.test
-
-DATABASE_URL=<test database>
-
-This file is intentionally gitignored.
-
-If unavailable, contributors should:
-
-- Run npm run build
-- Skip the Jest suite
-
 # License
 
-Private Project.
+MIT
 
-Copyright © 2026.
+---
 
-All rights reserved.
+# Author
+
+Muhammad Sopyan Maulana Ahsan
+
+WMS Enterprise
+2026
